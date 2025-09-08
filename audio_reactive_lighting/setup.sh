@@ -19,15 +19,11 @@ apt-get upgrade -y
 
 # Install system dependencies
 echo "Installing system dependencies..."
-apt-get install -y python3-pip python3-tk python3-dev portaudio19-dev
+apt-get install -y python3-pip python3-tk python3-dev python3-venv portaudio19-dev
 
 # Install OLA (Open Lighting Architecture)
 echo "Installing OLA..."
 apt-get install -y ola ola-python
-
-# Install Python dependencies
-echo "Installing Python dependencies..."
-pip3 install numpy sounddevice aubio
 
 # Copy files to home directory
 echo "Copying application files..."
@@ -35,6 +31,20 @@ TARGET_DIR="/home/pi/audio_reactive_lighting"
 mkdir -p "$TARGET_DIR"
 cp -r ./*.py "$TARGET_DIR/"
 cp audio_dmx.service "$TARGET_DIR/"
+cp setup.sh "$TARGET_DIR/"
+cp README.md "$TARGET_DIR/" 2>/dev/null || true
+
+# Create virtual environment
+echo "Creating Python virtual environment..."
+cd "$TARGET_DIR"
+sudo -u pi python3 -m venv venv
+
+# Install Python dependencies in virtual environment
+echo "Installing Python dependencies..."
+sudo -u pi "$TARGET_DIR/venv/bin/pip" install --upgrade pip
+sudo -u pi "$TARGET_DIR/venv/bin/pip" install numpy sounddevice aubio
+
+# Set ownership
 chown -R pi:pi "$TARGET_DIR"
 chmod +x "$TARGET_DIR/main.py"
 
@@ -68,7 +78,7 @@ echo "   $TARGET_DIR/config.py"
 echo ""
 echo "4. Test the system:"
 echo "   cd $TARGET_DIR"
-echo "   python3 main.py"
+echo "   ./venv/bin/python main.py"
 echo ""
 echo "5. Reboot to start automatically:"
 echo "   sudo reboot"

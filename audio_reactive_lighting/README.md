@@ -113,15 +113,24 @@ LIGHT_FIXTURES = [
 ## Usage
 
 ### Running Manually
+
+After installation, use the run script or activate the virtual environment:
+
 ```bash
 cd ~/audio_reactive_lighting
-python3 main.py
+
+# Option 1: Use the run script
+./run.sh
+
+# Option 2: Activate virtual environment manually
+source venv/bin/activate
+python main.py
 
 # For headless mode (no GUI):
-python3 main.py --headless
+./run.sh --headless
 
 # Check dependencies:
-python3 main.py --check-deps
+./run.sh --check-deps
 ```
 
 ### Auto-start on Boot
