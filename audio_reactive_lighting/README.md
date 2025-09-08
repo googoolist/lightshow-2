@@ -31,44 +31,53 @@ A real-time audio-reactive lighting controller for Raspberry Pi that analyzes li
 
 ## Installation
 
-### Quick Setup
+### Method 1: Two-Step Installation (Recommended)
 
-1. Clone or copy the project to your Raspberry Pi:
+This method separates system setup from user environment setup to avoid permission issues:
+
+1. Clone or copy the project:
 ```bash
 cd ~
 git clone <repository-url> audio_reactive_lighting
 cd audio_reactive_lighting
 ```
 
-2. Run the setup script:
+2. Run system setup (with sudo):
 ```bash
-sudo bash setup.sh
+sudo bash setup_system.sh
 ```
 
-3. Configure OLA for your DMX adapter:
+3. Run user installation (WITHOUT sudo):
+```bash
+./install_user.sh
+```
+
+4. Configure OLA for your DMX adapter:
    - Open browser: http://localhost:9090
    - Add your DMX USB device
    - Patch it to Universe 1
 
-4. Edit `config.py` to match your PAR light DMX channel mappings
+5. Edit `config.py` to match your PAR light DMX channel mappings
 
-5. Test the system:
+6. Test the system:
 ```bash
-python3 main.py
+./run.sh
 ```
 
-### Manual Installation
+### Method 2: Manual Installation
 
 1. Install system dependencies:
 ```bash
 sudo apt-get update
-sudo apt-get install -y python3-pip python3-tk python3-dev portaudio19-dev
+sudo apt-get install -y python3-pip python3-venv python3-tk python3-dev portaudio19-dev
 sudo apt-get install -y ola ola-python
 ```
 
-2. Install Python packages:
+2. Create virtual environment and install Python packages:
 ```bash
-pip3 install numpy sounddevice aubio
+python3 -m venv venv
+source venv/bin/activate
+pip install numpy sounddevice aubio
 ```
 
 3. Configure and start OLA daemon:
