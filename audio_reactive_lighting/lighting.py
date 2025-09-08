@@ -46,9 +46,13 @@ class DmxController:
         try:
             self.wrapper = ClientWrapper()
             self.client = self.wrapper.Client()
+            print(f"OLA client connected successfully")
+            print(f"Sending DMX to universe {config.DMX_UNIVERSE}")
             return True
         except Exception as e:
             print(f"Failed to connect to OLA: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def _dmx_loop(self):
@@ -71,6 +75,13 @@ class DmxController:
         
         # Compute and send frame
         frame = self._compute_dmx_frame()
+        
+        # Debug: Show first few channels if any are non-zero
+        non_zero = [i for i, v in enumerate(frame) if v > 0]
+        if non_zero:
+            preview = list(frame[:24])  # Show first 24 channels
+            print(f"DMX Frame: {preview} (non-zero channels: {non_zero[:10]})")
+        
         self.client.SendDmx(config.DMX_UNIVERSE, frame, self._dmx_callback)
         
         # Schedule next frame
@@ -80,6 +91,7 @@ class DmxController:
         """Callback after DMX send."""
         if not status.Succeeded():
             print(f"DMX send failed: {status}")
+            print(f"Error details: {status.message if hasattr(status, 'message') else 'Unknown error'}")
     
     def _compute_dmx_frame(self):
         """Compute the DMX channel values for current frame."""

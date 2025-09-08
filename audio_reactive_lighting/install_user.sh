@@ -46,6 +46,10 @@ pip install --upgrade pip
 echo "Installing Python dependencies..."
 pip install numpy sounddevice aubio
 
+# Install protobuf which OLA may require (version 3.20.x for compatibility)
+echo "Installing protobuf for OLA..."
+pip install "protobuf>=3.20.0,<4.0.0"
+
 # Link OLA Python bindings from system installation
 echo "Linking OLA Python bindings..."
 if [ -f "link_ola.sh" ]; then
