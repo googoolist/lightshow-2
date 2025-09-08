@@ -163,6 +163,16 @@ systemctl status audio_dmx.service
 
 ## Troubleshooting
 
+### "No module named 'ola'" Error
+If you get this error when running ./run.sh:
+```bash
+# The OLA Python bindings need to be linked to your virtual environment
+./link_ola.sh
+
+# Or reinstall the user environment
+./install_user.sh
+```
+
 ### No Audio Input Detected
 - Check USB audio device is connected
 - List audio devices: `python3 -c "import sounddevice; print(sounddevice.query_devices())"`

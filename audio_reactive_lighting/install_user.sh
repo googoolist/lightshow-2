@@ -46,6 +46,15 @@ pip install --upgrade pip
 echo "Installing Python dependencies..."
 pip install numpy sounddevice aubio
 
+# Link OLA Python bindings from system installation
+echo "Linking OLA Python bindings..."
+if [ -f "link_ola.sh" ]; then
+    ./link_ola.sh
+else
+    echo "Warning: OLA linking script not found."
+    echo "You may need to manually link OLA Python bindings."
+fi
+
 # Make scripts executable
 chmod +x main.py 2>/dev/null || true
 chmod +x run.sh 2>/dev/null || true
