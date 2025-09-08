@@ -1,0 +1,22 @@
+[Unit]
+Description=Audio-Reactive DMX Lighting Controller
+After=graphical.target olad.service
+Wants=olad.service
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+Environment="DISPLAY=:0.0"
+Environment="XAUTHORITY=/home/pi/.Xauthority"
+Environment="HOME=/home/pi"
+WorkingDirectory=/home/pi/audio_reactive_lighting
+ExecStartPre=/bin/sleep 5
+ExecStart=/usr/bin/python3 /home/pi/audio_reactive_lighting/main.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical.target

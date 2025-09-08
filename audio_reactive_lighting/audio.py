@@ -1,0 +1,195 @@
+"""
+Audio capture and analysis module for beat detection, BPM estimation, and intensity measurement.
+"""
+
+import numpy as np
+import sounddevice as sd
+import aubio
+import threading
+import queue
+import time
+from collections import deque
+import config
+
+
+class AudioAnalyzer:
+    def __init__(self, state_lock, beat_queue, stop_event):
+        """
+        Initialize the audio analyzer.
+        
+        Args:
+            state_lock: Threading lock for shared state access
+            beat_queue: Queue for beat events to lighting module
+            stop_event: Threading event to signal shutdown
+        """
+        self.state_lock = state_lock
+        self.beat_queue = beat_queue
+        self.stop_event = stop_event
+        
+        # Shared state variables
+        self.current_bpm = 0.0
+        self.current_intensity = 0.0
+        self.audio_active = False
+        
+        # Audio analysis setup
+        self.tempo_detector = aubio.tempo(
+            "default",
+            config.WIN_SIZE,
+            config.HOP_SIZE,
+            config.SAMPLE_RATE
+        )
+        
+        # Beat tracking
+        self.beat_timestamps = deque(maxlen=8)  # Keep last 8 beats for BPM calculation
+        self.last_beat_time = 0
+        
+        # Intensity smoothing
+        self.intensity_history = deque(maxlen=5)
+        
+        # Silence detection
+        self.silent_frames = 0
+        
+        # Audio stream
+        self.stream = None
+        
+    def start(self):
+        """Start the audio analysis thread."""
+        self.thread = threading.Thread(target=self._audio_loop, daemon=True)
+        self.thread.start()
+        
+    def _audio_loop(self):
+        """Main audio processing loop running in separate thread."""
+        try:
+            # Open audio input stream
+            self.stream = sd.InputStream(
+                device=config.AUDIO_DEVICE_NAME,
+                channels=1,
+                samplerate=config.SAMPLE_RATE,
+                blocksize=config.BUFFER_SIZE,
+                dtype='float32',
+                callback=None  # We'll use blocking read
+            )
+            
+            self.stream.start()
+            start_time = time.time()
+            
+            while not self.stop_event.is_set():
+                try:
+                    # Read audio block
+                    audio_data, overflowed = self.stream.read(config.BUFFER_SIZE)
+                    
+                    if overflowed:
+                        print("Audio buffer overflow detected")
+                    
+                    # Convert to mono float array
+                    buffer = np.array(audio_data, dtype=np.float32).flatten()
+                    
+                    # Process with aubio for beat detection
+                    current_time = time.time() - start_time
+                    beat_detected = self.tempo_detector(buffer)
+                    
+                    if beat_detected:
+                        self._handle_beat(current_time)
+                    
+                    # Calculate intensity (RMS)
+                    rms = np.sqrt(np.mean(buffer**2))
+                    self._update_intensity(rms)
+                    
+                    # Check for silence/audio presence
+                    self._update_audio_presence(rms)
+                    
+                    # Update shared state
+                    self._update_shared_state()
+                    
+                except sd.PortAudioError as e:
+                    print(f"Audio error: {e}")
+                    time.sleep(0.1)  # Brief pause before retry
+                    
+        except Exception as e:
+            print(f"Audio thread error: {e}")
+        finally:
+            if self.stream:
+                self.stream.stop()
+                self.stream.close()
+    
+    def _handle_beat(self, current_time):
+        """Process a detected beat."""
+        # Avoid double-triggering beats too close together
+        if current_time - self.last_beat_time < 0.1:  # Min 100ms between beats
+            return
+            
+        self.last_beat_time = current_time
+        self.beat_timestamps.append(current_time)
+        
+        # Calculate BPM from recent beats
+        if len(self.beat_timestamps) >= 2:
+            intervals = []
+            for i in range(1, len(self.beat_timestamps)):
+                interval = self.beat_timestamps[i] - self.beat_timestamps[i-1]
+                if 0.2 < interval < 2.0:  # Reasonable beat interval range
+                    intervals.append(interval)
+            
+            if intervals:
+                # Use median interval for stability
+                median_interval = np.median(intervals)
+                bpm = 60.0 / median_interval
+                
+                # Clamp to reasonable range
+                bpm = max(config.MIN_BPM, min(config.MAX_BPM, bpm))
+                self.current_bpm = bpm
+        
+        # Send beat event to lighting module
+        self.beat_queue.put({
+            'timestamp': current_time,
+            'bpm': self.current_bpm,
+            'intensity': self.current_intensity
+        })
+    
+    def _update_intensity(self, rms):
+        """Update and smooth the intensity measurement."""
+        # Add to history for smoothing
+        self.intensity_history.append(rms)
+        
+        if len(self.intensity_history) > 0:
+            # Apply smoothing
+            smoothed = np.mean(self.intensity_history)
+            
+            # Apply exponential smoothing with previous value
+            self.current_intensity = (
+                config.INTENSITY_SMOOTHING * self.current_intensity +
+                (1 - config.INTENSITY_SMOOTHING) * smoothed
+            )
+            
+            # Normalize to 0-1 range (assuming max RMS of 1.0 for float audio)
+            self.current_intensity = min(1.0, self.current_intensity)
+    
+    def _update_audio_presence(self, rms):
+        """Detect if audio is playing or paused."""
+        if rms < config.SILENCE_THRESHOLD:
+            self.silent_frames += 1
+        else:
+            self.silent_frames = 0
+        
+        # Update audio active status
+        self.audio_active = self.silent_frames < config.SILENCE_FRAME_COUNT
+    
+    def _update_shared_state(self):
+        """Update the shared state variables with thread lock."""
+        with self.state_lock:
+            # These will be read by other threads
+            pass  # State is already updated in instance variables
+    
+    def get_state(self):
+        """Get current audio state (thread-safe)."""
+        with self.state_lock:
+            return {
+                'bpm': self.current_bpm,
+                'intensity': self.current_intensity,
+                'audio_active': self.audio_active
+            }
+    
+    def stop(self):
+        """Stop the audio analysis thread."""
+        self.stop_event.set()
+        if hasattr(self, 'thread'):
+            self.thread.join(timeout=2.0)
