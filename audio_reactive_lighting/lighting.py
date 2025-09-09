@@ -40,12 +40,12 @@ class DmxController:
         self.color_fade_progress = [0.0] * 3  # Fade progress for each PAR
         self.last_color_change = 0
         
-        # Control parameters - defaults for relaxing smooth waves
-        self.smoothness = 0.75  # Default to smooth transitions (0.0 = fast, 1.0 = very smooth)
-        self.rainbow_level = 0.3  # Gentle color diversity (0.0 = single color, 1.0 = full rainbow)
-        self.brightness_control = 0.6  # Master brightness control (0.0 = dim, 1.0 = full)
+        # Control parameters - midpoint defaults for balanced effect
+        self.smoothness = 0.5  # Default midpoint (0.0 = fast, 1.0 = very smooth)
+        self.rainbow_level = 0.5  # Default midpoint (0.0 = single color, 1.0 = full rainbow)
+        self.brightness_control = 0.5  # Default midpoint (0.0 = dim, 1.0 = full)
         self.strobe_level = 0.0  # Default off (0.0 = off, 1.0 = max)
-        self.pattern = "wave"  # Default to wave pattern for flowing effect
+        self.pattern = "sync"  # Default to sync pattern
         self.control_lock = threading.Lock()
         
         # Initialize colors
@@ -199,21 +199,44 @@ class DmxController:
             # Apply pattern-based color selection
             r, g, b = self._apply_pattern(i, current_time)
             
-            # Calculate brightness with beat response
+            # Calculate brightness with beat response (expanded range)
             beat_boost = 0
             if beat_occurred:
                 time_since_beat = current_time - self.last_beat_time
-                # Beat flash duration affected by smoothness (doubled range)
-                # At max smoothness, beat flash is 4x longer than base
-                beat_duration = settings['beat_flash_duration'] * (1.0 + self.smoothness * 3.0)
+                
+                # Beat flash duration with expanded range
+                if self.smoothness < 0.5:
+                    # Fast: 0.1 to 0.3 seconds
+                    beat_duration = settings['beat_flash_duration'] * (0.2 + self.smoothness * 1.6)
+                else:
+                    # Slow: 0.3 to 2.0 seconds  
+                    beat_duration = settings['beat_flash_duration'] * (1.0 + (self.smoothness - 0.5) * 6.0)
+                
                 if time_since_beat < beat_duration:
-                    # Beat response intensity affected by smoothness (more gentle at high smoothness)
-                    beat_response = settings['beat_response'] * (1.0 - self.smoothness * 0.7)
+                    # Beat response intensity with expanded range
+                    if self.smoothness < 0.5:
+                        # Strong: 100% to 60% response
+                        beat_response = settings['beat_response'] * (1.0 - self.smoothness * 0.8)
+                    else:
+                        # Gentle: 60% to 10% response
+                        beat_response = settings['beat_response'] * (0.6 - (self.smoothness - 0.5) * 1.0)
                     beat_boost = beat_response * (1 - time_since_beat / beat_duration)
             
-            # Apply master brightness control on top of calculated brightness
+            # Apply master brightness control with expanded range
             brightness = min(1.0, intensity * settings['brightness_base'] + beat_boost)
-            brightness *= self.brightness_control  # Apply master brightness slider
+            
+            # Expanded brightness range:
+            # 0.0 = 10% brightness (very dim)
+            # 0.5 = 100% brightness (normal) 
+            # 1.0 = 150% brightness (boosted)
+            if self.brightness_control < 0.5:
+                # Dim range: 10% to 100%
+                brightness_multiplier = 0.1 + (self.brightness_control * 2 * 0.9)
+            else:
+                # Boost range: 100% to 150%
+                brightness_multiplier = 1.0 + ((self.brightness_control - 0.5) * 2 * 0.5)
+            
+            brightness *= brightness_multiplier
             
             # Set DMX values
             if 'dimmer' in channels:
@@ -291,22 +314,34 @@ class DmxController:
         with self.control_lock:
             current_time = time.time()
             
-            # Determine color change frequency based on rainbow level (with doubled smoothness range)
+            # Determine color change frequency with expanded smoothness range
             if self.rainbow_level < 0.2:
-                # Single color mode - change slowly (up to 2x slower)
-                change_interval = 8.0 + self.smoothness * 8.0  # 8-16 seconds
+                # Single color mode - change slowly
+                if self.smoothness < 0.5:
+                    change_interval = 4.0 + self.smoothness * 8.0  # 4-8 seconds (fast)
+                else:
+                    change_interval = 8.0 + (self.smoothness - 0.5) * 24.0  # 8-20 seconds (slow)
                 change_on_beat = False
             elif self.rainbow_level < 0.5:
                 # Moderate diversity - change occasionally
-                change_interval = 4.0 + self.smoothness * 4.0  # 4-8 seconds
+                if self.smoothness < 0.5:
+                    change_interval = 2.0 + self.smoothness * 4.0  # 2-4 seconds (fast)
+                else:
+                    change_interval = 4.0 + (self.smoothness - 0.5) * 8.0  # 4-8 seconds (slow)
                 change_on_beat = beat_occurred and intensity > 0.6
             elif self.rainbow_level < 0.8:
                 # High diversity - change frequently
-                change_interval = 2.0 + self.smoothness * 2.0  # 2-4 seconds
+                if self.smoothness < 0.5:
+                    change_interval = 1.0 + self.smoothness * 2.0  # 1-2 seconds (fast)
+                else:
+                    change_interval = 2.0 + (self.smoothness - 0.5) * 4.0  # 2-4 seconds (slow)
                 change_on_beat = beat_occurred and intensity > 0.4
             else:
                 # Full rainbow - change on every beat or quickly
-                change_interval = 1.0 + self.smoothness * 1.0  # 1-2 seconds
+                if self.smoothness < 0.5:
+                    change_interval = 0.5 + self.smoothness * 1.0  # 0.5-1 seconds (fast)
+                else:
+                    change_interval = 1.0 + (self.smoothness - 0.5) * 2.0  # 1-2 seconds (slow)
                 change_on_beat = beat_occurred
             
             # Check if it's time to change colors
@@ -374,12 +409,16 @@ class DmxController:
     
     def _update_color_fades(self):
         """Update the fade progress for color transitions."""
-        # Calculate fade speed based on smoothness (ultra smooth range)
-        # Smoothness 0.0 = instant (fade_speed = 1.0)
-        # Smoothness 0.5 = slow (fade_speed = ~0.008)
-        # Smoothness 0.75 = very slow (fade_speed = ~0.004) - default
-        # Smoothness 1.0 = ultra slow (fade_speed = 0.001) - extremely gentle
-        fade_speed = 0.001 + (1.0 - self.smoothness) * 0.999
+        # Calculate fade speed with expanded range (10x range)
+        # Smoothness 0.0 = super fast (fade_speed = 2.0) - instant changes
+        # Smoothness 0.5 = moderate (fade_speed = ~0.02) - balanced
+        # Smoothness 1.0 = ultra slow (fade_speed = 0.0005) - extremely gentle
+        if self.smoothness < 0.5:
+            # Fast range: 2.0 to 0.02 (100x range)
+            fade_speed = 2.0 - (self.smoothness * 2 * 0.99)
+        else:
+            # Slow range: 0.02 to 0.0005 (40x range)
+            fade_speed = 0.02 - ((self.smoothness - 0.5) * 2 * 0.01975)
         
         for i in range(3):
             if self.color_fade_progress[i] < 1.0:

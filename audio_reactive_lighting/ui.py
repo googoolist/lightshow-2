@@ -51,6 +51,9 @@ class AudioReactiveLightingGUI:
         # Create UI elements
         self._create_widgets()
         
+        # Initialize DMX controller with UI default values
+        self._initialize_controller()
+        
         # Start periodic updates
         self._schedule_update()
     
@@ -106,25 +109,25 @@ class AudioReactiveLightingGUI:
         right_col = ttk.Frame(controls_container)
         right_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(3, 0))
         
-        # Speed control (left column) - default to slow for relaxing effect
+        # Speed control (left column) - default to midpoint
         self._create_slider_control(
             left_col, "Speed", 
             self._on_smoothness_change,
-            0.25, "Slow", "Fast"  # 0.25 speed = 0.75 smoothness
+            0.5, "Slow", "Fast"  # Midpoint default
         )
         
-        # Rainbow control (left column) - gentle diversity
+        # Rainbow control (left column) - default to midpoint
         self._create_slider_control(
             left_col, "Rainbow",
             self._on_rainbow_change,
-            0.3, "Single", "Full"  # Gentle color variety
+            0.5, "Single", "Full"  # Midpoint default
         )
         
-        # Brightness control (left column) - default to moderate brightness
+        # Brightness control (left column) - default to midpoint
         self._create_slider_control(
             left_col, "Brightness",
             self._on_brightness_change,
-            0.6, "Dim", "Bright"  # Default 60% for ambient lighting
+            0.5, "Dim", "Bright"  # Midpoint default
         )
         
         # Strobe control (right column)
@@ -140,7 +143,7 @@ class AudioReactiveLightingGUI:
         
         ttk.Label(pattern_frame, text="Pattern:", font=('Arial', 9, 'bold')).pack(anchor=tk.W)
         
-        self.pattern_var = tk.StringVar(value="Wave")  # Default to Wave for flowing effect
+        self.pattern_var = tk.StringVar(value="Sync")  # Default to Sync pattern
         self.pattern_combo = ttk.Combobox(
             pattern_frame,
             textvariable=self.pattern_var,
@@ -206,6 +209,16 @@ class AudioReactiveLightingGUI:
         
         # Right label
         ttk.Label(slider_frame, text=right_label, font=('Arial', 8), foreground='gray').pack(side=tk.LEFT)
+    
+    def _initialize_controller(self):
+        """Initialize the DMX controller with the UI's default values."""
+        if self.dmx_controller:
+            # Set initial values from sliders
+            self._on_smoothness_change(self.smoothness_var.get())
+            self._on_rainbow_change(self.rainbow_var.get())
+            self._on_brightness_change(self.brightness_var.get())
+            self._on_strobe_change(self.strobe_var.get())
+            self._on_pattern_change()
     
     def _schedule_update(self):
         """Schedule periodic GUI updates."""
