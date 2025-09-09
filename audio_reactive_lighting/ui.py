@@ -31,8 +31,7 @@ class AudioReactiveLightingGUI:
             self.root.attributes('-fullscreen', True)
             # Bind escape key to exit fullscreen
             self.root.bind('<Escape>', lambda e: self._on_quit())
-            # Hide cursor in fullscreen mode
-            self.root.config(cursor="none")
+            # Cursor is visible by default - removed cursor="none"
         else:
             self.root.geometry(f"{config.WINDOW_WIDTH}x{config.WINDOW_HEIGHT}")
         
