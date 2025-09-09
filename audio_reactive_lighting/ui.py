@@ -116,17 +116,6 @@ class AudioReactiveLightingGUI:
         self.intensity_label = ttk.Label(intensity_frame, text="0%", font=('Arial', 11))
         self.intensity_label.pack(side=tk.LEFT, padx=(5, 0))
         
-        # Intensity progress bar (full width)
-        self.intensity_bar = ttk.Progressbar(
-            main_frame,
-            orient=tk.HORIZONTAL,
-            length=300,
-            mode='determinate',
-            maximum=100,
-            style='Accent.Horizontal.TProgressbar'
-        )
-        self.intensity_bar.pack(fill=tk.X, pady=(10, 10))
-        
         # Smoothness control frame
         smooth_frame = ttk.Frame(main_frame)
         smooth_frame.pack(fill=tk.X, pady=(0, 10))
@@ -195,7 +184,6 @@ class AudioReactiveLightingGUI:
         # Update intensity display
         intensity_percent = int(intensity * 100)
         self.intensity_label.config(text=f"{intensity_percent}%")
-        self.intensity_bar['value'] = intensity_percent
         
         # Update audio status indicator
         if audio_active:
