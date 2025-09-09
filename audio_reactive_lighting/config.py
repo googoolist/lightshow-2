@@ -18,10 +18,12 @@ BEAT_CONFIDENCE_THRESH = 0.2       # Confidence threshold for beat detection
 
 # DMX/Lighting settings
 DMX_UNIVERSE = 1                   # OLA universe to send to
-DMX_CHANNELS = 24                  # Total channels to send (3 PARs * 8 channels max)
+DMX_CHANNELS = 64                  # Total channels to send (8 PARs * 8 channels max)
 UPDATE_FPS = 30                    # DMX update frequency
+DEFAULT_LIGHT_COUNT = 3            # Default number of active lights
+MAX_LIGHTS = 8                     # Maximum supported lights
 
-# PAR light configuration - 3 PAR lights with RGBW or similar channels
+# PAR light configuration - Up to 8 PAR lights with RGBW or similar channels
 # Adjust channel mappings based on your specific PAR light models
 LIGHT_FIXTURES = [
     {
@@ -53,6 +55,71 @@ LIGHT_FIXTURES = [
     {
         "name": "PAR3",
         "start_channel": 17,
+        "channels": {
+            "dimmer": 0,
+            "red": 1,
+            "green": 2,
+            "blue": 3,
+            "white": 4,
+            "strobe": 5,
+            "mode": 6,
+        }
+    },
+    {
+        "name": "PAR4",
+        "start_channel": 25,
+        "channels": {
+            "dimmer": 0,
+            "red": 1,
+            "green": 2,
+            "blue": 3,
+            "white": 4,
+            "strobe": 5,
+            "mode": 6,
+        }
+    },
+    {
+        "name": "PAR5",
+        "start_channel": 33,
+        "channels": {
+            "dimmer": 0,
+            "red": 1,
+            "green": 2,
+            "blue": 3,
+            "white": 4,
+            "strobe": 5,
+            "mode": 6,
+        }
+    },
+    {
+        "name": "PAR6",
+        "start_channel": 41,
+        "channels": {
+            "dimmer": 0,
+            "red": 1,
+            "green": 2,
+            "blue": 3,
+            "white": 4,
+            "strobe": 5,
+            "mode": 6,
+        }
+    },
+    {
+        "name": "PAR7",
+        "start_channel": 49,
+        "channels": {
+            "dimmer": 0,
+            "red": 1,
+            "green": 2,
+            "blue": 3,
+            "white": 4,
+            "strobe": 5,
+            "mode": 6,
+        }
+    },
+    {
+        "name": "PAR8",
+        "start_channel": 57,
         "channels": {
             "dimmer": 0,
             "red": 1,

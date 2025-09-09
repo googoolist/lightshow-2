@@ -29,15 +29,18 @@ class DmxController:
         self.wrapper = None
         self.client = None
         
-        # Lighting state
+        # Light count configuration
+        self.active_lights = config.DEFAULT_LIGHT_COUNT
+        
+        # Lighting state (sized for max lights)
         self.current_color_index = 0
-        self.beat_flash_time = [0, 0, 0]  # Track flash timing for each PAR
+        self.beat_flash_time = [0] * config.MAX_LIGHTS  # Track flash timing for each PAR
         self.last_beat_time = 0
         
-        # Color state for smooth transitions
-        self.target_colors = [(0, 0, 0)] * 3  # Target colors for each PAR
-        self.current_colors = [(0, 0, 0)] * 3  # Current colors for smooth fading
-        self.color_fade_progress = [0.0] * 3  # Fade progress for each PAR
+        # Color state for smooth transitions (sized for max lights)
+        self.target_colors = [(0, 0, 0)] * config.MAX_LIGHTS  # Target colors for each PAR
+        self.current_colors = [(0, 0, 0)] * config.MAX_LIGHTS  # Current colors for smooth fading
+        self.color_fade_progress = [0.0] * config.MAX_LIGHTS  # Fade progress for each PAR
         self.last_color_change = 0
         
         # Control parameters - midpoint defaults for balanced effect
@@ -62,14 +65,14 @@ class DmxController:
             if self.rainbow_level < 0.2:
                 # Single color mode - all lights same color
                 color = palette[0]
-                for i in range(3):
+                for i in range(self.active_lights):
                     self.target_colors[i] = color
                     self.current_colors[i] = color
             else:
                 # Diverse colors - spread across palette
                 palette_size = len(palette)
-                spread = int(palette_size * self.rainbow_level / 3)
-                for i in range(3):
+                spread = int(palette_size * self.rainbow_level / max(3, self.active_lights))
+                for i in range(self.active_lights):
                     idx = (i * spread) % palette_size
                     self.target_colors[i] = palette[idx]
                     self.current_colors[i] = self.target_colors[i]
@@ -110,6 +113,14 @@ class DmxController:
             with self.control_lock:
                 self.pattern = pattern_name
                 print(f"Pattern set to: {self.pattern}")
+    
+    def set_light_count(self, count):
+        """Set the number of active lights."""
+        with self.control_lock:
+            self.active_lights = max(1, min(count, config.MAX_LIGHTS))
+            print(f"Active lights set to: {self.active_lights}")
+            # Reinitialize colors for new light count
+            self._initialize_colors()
     
     def _setup_ola(self):
         """Initialize OLA client connection."""
@@ -192,7 +203,9 @@ class DmxController:
         current_time = time.time()
         settings = config.LIGHTING_SETTINGS
         
-        for i, fixture in enumerate(config.LIGHT_FIXTURES):
+        # Only process active lights
+        for i in range(self.active_lights):
+            fixture = config.LIGHT_FIXTURES[i]
             base_channel = fixture['start_channel'] - 1
             channels = fixture['channels']
             
@@ -228,35 +241,38 @@ class DmxController:
             # Expanded brightness range:
             # 0.0 = 10% brightness (very dim)
             # 0.5 = 100% brightness (normal) 
-            # 1.0 = 150% brightness (boosted)
+            # 1.0 = 120% brightness (boosted, clamped to prevent overflow)
             if self.brightness_control < 0.5:
                 # Dim range: 10% to 100%
                 brightness_multiplier = 0.1 + (self.brightness_control * 2 * 0.9)
             else:
-                # Boost range: 100% to 150%
-                brightness_multiplier = 1.0 + ((self.brightness_control - 0.5) * 2 * 0.5)
+                # Boost range: 100% to 120% (reduced from 150% to prevent overflow)
+                brightness_multiplier = 1.0 + ((self.brightness_control - 0.5) * 2 * 0.2)
             
             brightness *= brightness_multiplier
             
-            # Set DMX values
+            # Clamp brightness to prevent DMX overflow
+            brightness = min(1.0, brightness)
+            
+            # Set DMX values with clamping
             if 'dimmer' in channels:
-                data[base_channel + channels['dimmer']] = int(brightness * 255)
+                data[base_channel + channels['dimmer']] = min(255, int(brightness * 255))
                 scale = 1.0
             else:
                 scale = brightness
             
             if 'red' in channels:
-                data[base_channel + channels['red']] = int(r * scale)
+                data[base_channel + channels['red']] = min(255, int(r * scale))
             if 'green' in channels:
-                data[base_channel + channels['green']] = int(g * scale)
+                data[base_channel + channels['green']] = min(255, int(g * scale))
             if 'blue' in channels:
-                data[base_channel + channels['blue']] = int(b * scale)
+                data[base_channel + channels['blue']] = min(255, int(b * scale))
             
             # Apply strobe effect on strong beats
             if 'strobe' in channels and self.strobe_level > 0:
                 if beat_occurred and intensity > (1.0 - self.strobe_level * 0.5):
                     # Strobe intensity based on slider (0-255)
-                    strobe_value = int(self.strobe_level * 255)
+                    strobe_value = min(255, int(self.strobe_level * 255))
                     data[base_channel + channels['strobe']] = strobe_value
                 else:
                     data[base_channel + channels['strobe']] = 0
@@ -270,40 +286,62 @@ class DmxController:
             return self.current_colors[light_index]
             
         elif self.pattern == "wave":
-            # Colors flow from left to right (with doubled smoothness range)
-            # At max smoothness, wave is 4x slower than at min
+            # Colors flow from left to right
             wave_speed = 0.5 + (1.0 - self.smoothness) * 3.5  # 0.5 to 4.0 speed range
-            wave_offset = int((current_time * wave_speed) % 3)
-            color_idx = (light_index + wave_offset) % 3
+            wave_offset = int((current_time * wave_speed) % self.active_lights)
+            color_idx = (light_index + wave_offset) % self.active_lights
             return self.current_colors[color_idx]
             
         elif self.pattern == "center":
-            # Center light leads, outer lights follow
-            if light_index == 1:  # Center light (PAR2)
-                return self.current_colors[1]
-            else:  # Outer lights mirror center with delay
-                delay_frames = int(10 * self.smoothness)  # More delay when smoother
-                return self.current_colors[1] if delay_frames == 0 else self.current_colors[light_index]
+            # Center light(s) lead, outer lights follow
+            center_idx = self.active_lights // 2
+            if self.active_lights % 2 == 1:
+                # Odd number: single center
+                if light_index == center_idx:
+                    return self.current_colors[center_idx]
+            else:
+                # Even number: two center lights
+                if light_index == center_idx or light_index == center_idx - 1:
+                    return self.current_colors[light_index]
+            
+            # Outer lights mirror center with delay
+            delay_frames = int(10 * self.smoothness)
+            return self.current_colors[center_idx] if delay_frames == 0 else self.current_colors[light_index]
                 
         elif self.pattern == "alternate":
-            # Lights alternate between two color groups
-            beat_phase = int(current_time * 2) % 2
-            if light_index == 1:  # Center always active
-                return self.current_colors[1]
-            elif (light_index == 0 and beat_phase == 0) or (light_index == 2 and beat_phase == 1):
-                return self.current_colors[light_index]
+            # Lights alternate in groups
+            if self.active_lights <= 2:
+                # Simple alternation for 1-2 lights
+                beat_phase = int(current_time * 2) % 2
+                return self.current_colors[light_index] if beat_phase == 0 else (
+                    int(self.current_colors[light_index][0] * 0.3),
+                    int(self.current_colors[light_index][1] * 0.3),
+                    int(self.current_colors[light_index][2] * 0.3)
+                )
             else:
-                # Dim the inactive lights
-                r, g, b = self.current_colors[light_index]
-                dim_factor = 0.3
-                return (int(r * dim_factor), int(g * dim_factor), int(b * dim_factor))
+                # Group alternation for 3+ lights
+                beat_phase = int(current_time * 2) % 2
+                group = light_index % 2
+                if group == beat_phase:
+                    return self.current_colors[light_index]
+                else:
+                    r, g, b = self.current_colors[light_index]
+                    return (int(r * 0.3), int(g * 0.3), int(b * 0.3))
                 
         elif self.pattern == "mirror":
-            # Outer lights mirror each other, center is unique
-            if light_index == 1:  # Center light
-                return self.current_colors[1]
-            else:  # Outer lights use same color
+            # Lights mirror from center outward
+            if self.active_lights == 1:
                 return self.current_colors[0]
+            
+            # Calculate mirror pairs
+            mirror_point = self.active_lights / 2.0
+            if light_index < mirror_point:
+                # Left side
+                return self.current_colors[light_index]
+            else:
+                # Right side mirrors left
+                mirror_idx = self.active_lights - 1 - light_index
+                return self.current_colors[mirror_idx]
                 
         else:
             # Default to sync
@@ -370,7 +408,7 @@ class DmxController:
             next_idx = (current_idx + 1) % palette_size
             new_color = palette[next_idx]
             
-            for i in range(3):
+            for i in range(self.active_lights):
                 self.target_colors[i] = new_color
                 self.color_fade_progress[i] = 0.0
                 
@@ -379,7 +417,7 @@ class DmxController:
             base_idx = random.randint(0, palette_size - 1)
             spread = int(palette_size * 0.3)  # Colors within 30% of palette
             
-            for i in range(3):
+            for i in range(self.active_lights):
                 offset = i * spread // 3
                 idx = (base_idx + offset) % palette_size
                 self.target_colors[i] = palette[idx]
@@ -390,11 +428,11 @@ class DmxController:
             indices = []
             spread = palette_size // 3
             
-            for i in range(3):
+            for i in range(self.active_lights):
                 idx = (i * spread + random.randint(0, spread-1)) % palette_size
                 indices.append(idx)
             
-            for i in range(3):
+            for i in range(self.active_lights):
                 self.target_colors[i] = palette[indices[i]]
                 self.color_fade_progress[i] = 0.0
                 
@@ -403,7 +441,7 @@ class DmxController:
             # Each light gets a random color from different parts of palette
             indices = random.sample(range(palette_size), min(3, palette_size))
             
-            for i in range(3):
+            for i in range(self.active_lights):
                 self.target_colors[i] = palette[indices[i]]
                 self.color_fade_progress[i] = 0.0
     

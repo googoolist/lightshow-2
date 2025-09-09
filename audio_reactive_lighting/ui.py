@@ -155,10 +155,55 @@ class AudioReactiveLightingGUI:
         self.pattern_combo.pack(fill=tk.X, pady=(2, 0))
         self.pattern_combo.bind("<<ComboboxSelected>>", self._on_pattern_change)
         
+        # Light count control (right column)
+        lights_frame = ttk.Frame(right_col)
+        lights_frame.pack(fill=tk.X, pady=(0, 8))
+        
+        ttk.Label(lights_frame, text="Lights:", font=('Arial', 9, 'bold')).pack(anchor=tk.W)
+        
+        # Light count spinner frame
+        spinner_frame = ttk.Frame(lights_frame)
+        spinner_frame.pack(fill=tk.X, pady=(2, 0))
+        
+        self.light_count_var = tk.IntVar(value=config.DEFAULT_LIGHT_COUNT)
+        
+        # Decrement button
+        ttk.Button(
+            spinner_frame,
+            text="-",
+            width=3,
+            command=self._decrement_lights
+        ).pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Light count display
+        self.light_count_label = ttk.Label(
+            spinner_frame,
+            text=str(config.DEFAULT_LIGHT_COUNT),
+            font=('Arial', 10, 'bold'),
+            width=3
+        )
+        self.light_count_label.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Increment button  
+        ttk.Button(
+            spinner_frame,
+            text="+",
+            width=3,
+            command=self._increment_lights
+        ).pack(side=tk.LEFT)
+        
+        # Range label
+        ttk.Label(
+            spinner_frame,
+            text=f"(1-{config.MAX_LIGHTS})",
+            font=('Arial', 8),
+            foreground='gray'
+        ).pack(side=tk.LEFT, padx=(10, 0))
+        
         # Info label at bottom
         self.info_label = ttk.Label(
             main_frame,
-            text="3 PAR • DMX 1",
+            text=f"{config.DEFAULT_LIGHT_COUNT} PAR • DMX 1",
             font=('Arial', 8),
             foreground='gray'
         )
@@ -219,6 +264,8 @@ class AudioReactiveLightingGUI:
             self._on_brightness_change(self.brightness_var.get())
             self._on_strobe_change(self.strobe_var.get())
             self._on_pattern_change()
+            # Set initial light count
+            self.dmx_controller.set_light_count(self.light_count_var.get())
     
     def _schedule_update(self):
         """Schedule periodic GUI updates."""
@@ -280,6 +327,29 @@ class AudioReactiveLightingGUI:
         pattern = self.pattern_var.get().lower()
         if self.dmx_controller:
             self.dmx_controller.set_pattern(pattern)
+    
+    def _increment_lights(self):
+        """Increment the number of active lights."""
+        current = self.light_count_var.get()
+        if current < config.MAX_LIGHTS:
+            new_count = current + 1
+            self._update_light_count(new_count)
+    
+    def _decrement_lights(self):
+        """Decrement the number of active lights."""
+        current = self.light_count_var.get()
+        if current > 1:
+            new_count = current - 1
+            self._update_light_count(new_count)
+    
+    def _update_light_count(self, count):
+        """Update the light count and notify controller."""
+        self.light_count_var.set(count)
+        self.light_count_label.config(text=str(count))
+        self.info_label.config(text=f"{count} PAR • DMX 1")
+        
+        if self.dmx_controller:
+            self.dmx_controller.set_light_count(count)
     
     def _on_quit(self):
         """Handle quit button click."""
