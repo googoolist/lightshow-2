@@ -7,11 +7,11 @@
 export DISPLAY=:0
 export XAUTHORITY=$HOME/.Xauthority
 
-# Change to the app directory
-cd /home/$USER/audio_reactive_lighting
+# Change to the app directory (CORRECT PATH)
+cd /home/$USER/lightshow-2/audio_reactive_lighting
 
 # Log file
-LOG="/home/$USER/audio_reactive_lighting/autostart.log"
+LOG="/home/$USER/lightshow-2/audio_reactive_lighting/autostart.log"
 
 # Log startup
 echo "========================" >> "$LOG"
