@@ -29,9 +29,15 @@ class AudioReactiveLightingGUI:
         # Set window size
         if config.FULLSCREEN:
             self.root.attributes('-fullscreen', True)
-            # Bind escape key to exit fullscreen
+            # Bind multiple keys to exit for safety
             self.root.bind('<Escape>', lambda e: self._on_quit())
-            # Cursor is visible by default - removed cursor="none"
+            self.root.bind('<q>', lambda e: self._on_quit())
+            self.root.bind('<Q>', lambda e: self._on_quit())
+            # Allow Alt+Tab to work
+            self.root.attributes('-topmost', False)
+            # Don't grab exclusive focus
+            self.root.focus_set()
+            # Cursor is visible by default
         else:
             self.root.geometry(f"{config.WINDOW_WIDTH}x{config.WINDOW_HEIGHT}")
         
