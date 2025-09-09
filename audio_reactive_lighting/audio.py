@@ -155,9 +155,11 @@ class AudioAnalyzer:
             smoothed = np.mean(self.intensity_history)
             
             # Apply exponential smoothing with previous value
+            # Use a default smoothing value for audio analysis (independent of lighting modes)
+            smoothing_factor = 0.7
             self.current_intensity = (
-                config.INTENSITY_SMOOTHING * self.current_intensity +
-                (1 - config.INTENSITY_SMOOTHING) * smoothed
+                smoothing_factor * self.current_intensity +
+                (1 - smoothing_factor) * smoothed
             )
             
             # Normalize to 0-1 range (assuming max RMS of 1.0 for float audio)
