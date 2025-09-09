@@ -45,6 +45,9 @@ class DmxController:
         self.color_fade_progress = [0.0] * 3  # Fade progress for each PAR
         self.last_color_change = 0
         
+        # Smoothness control (0.0 = fast/instant, 1.0 = very smooth/slow)
+        self.smoothness = 0.5  # Default middle position
+        
         # DMX frame update interval (milliseconds)
         self.update_interval = int(1000 / config.UPDATE_FPS)
         
@@ -72,6 +75,12 @@ class DmxController:
         """Get the current lighting mode name."""
         with self.mode_lock:
             return self.current_mode
+    
+    def set_smoothness(self, value):
+        """Set the smoothness level (0.0 = fast, 1.0 = very smooth)."""
+        with self.mode_lock:
+            self.smoothness = max(0.0, min(1.0, value))
+            print(f"Smoothness set to: {self.smoothness:.2f}")
     
     def _setup_ola(self):
         """Initialize OLA client connection."""
@@ -175,9 +184,15 @@ class DmxController:
                 self.color_fade_progress[i] = 0.0
         
         # Update fade progress for each light
+        # Dynamic fade speed based on smoothness slider
+        # Smoothness 0.0 = instant (fade_speed = 1.0)
+        # Smoothness 0.5 = moderate (fade_speed = 0.02-0.05)
+        # Smoothness 1.0 = very slow (fade_speed = 0.005)
+        fade_speed = 0.005 + (1.0 - self.smoothness) * 0.995  # Inverse relationship
+        
         for i in range(3):
             if self.color_fade_progress[i] < 1.0:
-                self.color_fade_progress[i] = min(1.0, self.color_fade_progress[i] + settings['fade_speed'])
+                self.color_fade_progress[i] = min(1.0, self.color_fade_progress[i] + fade_speed)
                 
                 # Interpolate between current and target colors
                 r_current, g_current, b_current = self.current_colors[i]
@@ -201,11 +216,14 @@ class DmxController:
             r, g, b = self.current_colors[i]
             
             # Gentle intensity modulation with beat response
+            # Smoothness affects beat response intensity
             beat_boost = 0
             if beat_occurred:
                 time_since_beat = current_time - self.last_beat_time
-                if time_since_beat < settings['beat_flash_duration']:
-                    beat_boost = settings['beat_response'] * (1 - time_since_beat / settings['beat_flash_duration'])
+                beat_duration = settings['beat_flash_duration'] * (1.0 + self.smoothness * 2.0)  # Longer flash when smoother
+                if time_since_beat < beat_duration:
+                    beat_response = settings['beat_response'] * (1.0 - self.smoothness * 0.5)  # Gentler response when smoother
+                    beat_boost = beat_response * (1 - time_since_beat / beat_duration)
             
             brightness = min(1.0, intensity * settings['brightness_base'] + beat_boost)
             
@@ -261,8 +279,10 @@ class DmxController:
             base_channel = fixture['start_channel'] - 1
             channels = fixture['channels']
             
-            # Strong beat flash effect
-            flash_active = (time.time() - self.beat_flash_time[i]) < settings['beat_flash_duration']
+            # Strong beat flash effect (modified by smoothness)
+            # Less smoothness = shorter, more intense flashes
+            flash_duration = settings['beat_flash_duration'] * (0.5 + self.smoothness * 1.5)
+            flash_active = (time.time() - self.beat_flash_time[i]) < flash_duration
             
             if settings['alternating']:
                 light_active = self.lights_on[i]
@@ -270,9 +290,11 @@ class DmxController:
                 light_active = True
             
             if light_active:
-                # Rapid intensity changes
+                # Rapid intensity changes (smoothness affects transition speed)
                 if flash_active:
-                    brightness = 255
+                    # Smoothness affects flash intensity
+                    flash_intensity = 1.0 - (self.smoothness * 0.3)  # Less intense when smoother
+                    brightness = int(255 * flash_intensity)
                 else:
                     brightness = int(intensity * 255 * settings['brightness_base'])
                 
@@ -335,10 +357,14 @@ class DmxController:
             base_channel = fixture['start_channel'] - 1
             channels = fixture['channels']
             
-            flash_active = (time.time() - self.beat_flash_time[i]) < settings['beat_flash_duration']
+            # Flash duration affected by smoothness
+            flash_duration = settings['beat_flash_duration'] * (0.5 + self.smoothness * 1.5)
+            flash_active = (time.time() - self.beat_flash_time[i]) < flash_duration
             
             if flash_active:
-                brightness = 255
+                # Smoothness affects flash intensity
+                flash_intensity = 1.0 - (self.smoothness * 0.2)  # Slightly less reduction than rapid mode
+                brightness = int(255 * flash_intensity)
             else:
                 brightness = int(intensity * 255 * settings['brightness_base'])
             

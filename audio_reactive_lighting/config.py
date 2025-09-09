@@ -138,5 +138,5 @@ SMOOTH_COLOR_PALETTE = [
 # GUI settings
 GUI_UPDATE_INTERVAL = 200          # GUI refresh interval in milliseconds
 WINDOW_WIDTH = 450
-WINDOW_HEIGHT = 200                # Compact design for small screens
-FULLSCREEN = False                 # Set to True for kiosk mode
+WINDOW_HEIGHT = 250                # Compact design with smoothness slider
+FULLSCREEN = True                  # Fullscreen mode for kiosk/auto-start

@@ -29,6 +29,10 @@ class AudioReactiveLightingGUI:
         # Set window size
         if config.FULLSCREEN:
             self.root.attributes('-fullscreen', True)
+            # Bind escape key to exit fullscreen
+            self.root.bind('<Escape>', lambda e: self._on_quit())
+            # Hide cursor in fullscreen mode
+            self.root.config(cursor="none")
         else:
             self.root.geometry(f"{config.WINDOW_WIDTH}x{config.WINDOW_HEIGHT}")
         
@@ -124,6 +128,29 @@ class AudioReactiveLightingGUI:
         )
         self.intensity_bar.pack(fill=tk.X, pady=(10, 10))
         
+        # Smoothness control frame
+        smooth_frame = ttk.Frame(main_frame)
+        smooth_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(smooth_frame, text="Smoothness:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Smoothness slider
+        self.smoothness_var = tk.DoubleVar(value=0.5)  # Default middle position
+        self.smoothness_slider = ttk.Scale(
+            smooth_frame,
+            from_=0.0,
+            to=1.0,
+            orient=tk.HORIZONTAL,
+            variable=self.smoothness_var,
+            command=self._on_smoothness_change,
+            length=200
+        )
+        self.smoothness_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        
+        # Smoothness labels
+        ttk.Label(smooth_frame, text="Fast", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(smooth_frame, text="Smooth", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT)
+        
         # Control frame
         control_frame = ttk.Frame(main_frame)
         control_frame.pack(fill=tk.X, pady=(0, 10))
@@ -186,6 +213,12 @@ class AudioReactiveLightingGUI:
             self.mode_var.set(mode_key)
             # Update description
             self.mode_description.config(text=config.LIGHTING_MODES[mode_key]['description'])
+    
+    def _on_smoothness_change(self, value):
+        """Handle smoothness slider change."""
+        smoothness = float(value)
+        if self.dmx_controller:
+            self.dmx_controller.set_smoothness(smoothness)
     
     def _on_quit(self):
         """Handle quit button click."""
