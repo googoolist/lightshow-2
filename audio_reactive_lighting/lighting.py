@@ -203,11 +203,12 @@ class DmxController:
             beat_boost = 0
             if beat_occurred:
                 time_since_beat = current_time - self.last_beat_time
-                # Beat flash duration affected by smoothness
-                beat_duration = settings['beat_flash_duration'] * (1.0 + self.smoothness * 2.0)
+                # Beat flash duration affected by smoothness (doubled range)
+                # At max smoothness, beat flash is 4x longer than base
+                beat_duration = settings['beat_flash_duration'] * (1.0 + self.smoothness * 3.0)
                 if time_since_beat < beat_duration:
-                    # Beat response intensity affected by smoothness
-                    beat_response = settings['beat_response'] * (1.0 - self.smoothness * 0.5)
+                    # Beat response intensity affected by smoothness (more gentle at high smoothness)
+                    beat_response = settings['beat_response'] * (1.0 - self.smoothness * 0.7)
                     beat_boost = beat_response * (1 - time_since_beat / beat_duration)
             
             brightness = min(1.0, intensity * settings['brightness_base'] + beat_boost)
@@ -244,8 +245,9 @@ class DmxController:
             return self.current_colors[light_index]
             
         elif self.pattern == "wave":
-            # Colors flow from left to right
-            wave_speed = 2.0 * (1.0 - self.smoothness * 0.5)  # Speed affected by smoothness
+            # Colors flow from left to right (with doubled smoothness range)
+            # At max smoothness, wave is 4x slower than at min
+            wave_speed = 0.5 + (1.0 - self.smoothness) * 3.5  # 0.5 to 4.0 speed range
             wave_offset = int((current_time * wave_speed) % 3)
             color_idx = (light_index + wave_offset) % 3
             return self.current_colors[color_idx]
@@ -287,22 +289,22 @@ class DmxController:
         with self.control_lock:
             current_time = time.time()
             
-            # Determine color change frequency based on rainbow level
+            # Determine color change frequency based on rainbow level (with doubled smoothness range)
             if self.rainbow_level < 0.2:
-                # Single color mode - change slowly
-                change_interval = 8.0 + self.smoothness * 4.0  # 8-12 seconds
+                # Single color mode - change slowly (up to 2x slower)
+                change_interval = 8.0 + self.smoothness * 8.0  # 8-16 seconds
                 change_on_beat = False
             elif self.rainbow_level < 0.5:
                 # Moderate diversity - change occasionally
-                change_interval = 4.0 + self.smoothness * 2.0  # 4-6 seconds
+                change_interval = 4.0 + self.smoothness * 4.0  # 4-8 seconds
                 change_on_beat = beat_occurred and intensity > 0.6
             elif self.rainbow_level < 0.8:
                 # High diversity - change frequently
-                change_interval = 2.0 + self.smoothness * 1.0  # 2-3 seconds
+                change_interval = 2.0 + self.smoothness * 2.0  # 2-4 seconds
                 change_on_beat = beat_occurred and intensity > 0.4
             else:
                 # Full rainbow - change on every beat or quickly
-                change_interval = 1.0 + self.smoothness * 0.5  # 1-1.5 seconds
+                change_interval = 1.0 + self.smoothness * 1.0  # 1-2 seconds
                 change_on_beat = beat_occurred
             
             # Check if it's time to change colors
@@ -392,11 +394,11 @@ class DmxController:
     
     def _update_color_fades(self):
         """Update the fade progress for color transitions."""
-        # Calculate fade speed based on smoothness
+        # Calculate fade speed based on smoothness (doubled range)
         # Smoothness 0.0 = instant (fade_speed = 1.0)
-        # Smoothness 0.5 = moderate (fade_speed = 0.02-0.05)
-        # Smoothness 1.0 = very slow (fade_speed = 0.005)
-        fade_speed = 0.005 + (1.0 - self.smoothness) * 0.995
+        # Smoothness 0.5 = moderate (fade_speed = 0.01-0.02)
+        # Smoothness 1.0 = ultra slow (fade_speed = 0.0025) - 2x slower than before
+        fade_speed = 0.0025 + (1.0 - self.smoothness) * 0.9975
         
         for i in range(3):
             if self.color_fade_progress[i] < 1.0:

@@ -55,176 +55,157 @@ class AudioReactiveLightingGUI:
         self._schedule_update()
     
     def _create_widgets(self):
-        """Create all GUI widgets - compact design for small screens."""
-        # Main container with less padding
-        main_frame = ttk.Frame(self.root, padding="10")
+        """Create all GUI widgets - ultra-compact design for 320x480 screen."""
+        # Main container with minimal padding
+        main_frame = ttk.Frame(self.root, padding="5")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Combined status and metrics frame (no header)
+        # Top status bar (very compact)
         status_frame = ttk.Frame(main_frame)
-        status_frame.pack(fill=tk.X, pady=(0, 10))
+        status_frame.pack(fill=tk.X, pady=(0, 5))
         
-        # Audio active indicator with status text
-        indicator_frame = ttk.Frame(status_frame)
-        indicator_frame.pack(side=tk.LEFT, padx=(0, 20))
-        
-        self.status_indicator = tk.Canvas(indicator_frame, width=20, height=20)
+        # Audio indicator
+        self.status_indicator = tk.Canvas(status_frame, width=15, height=15)
         self.status_indicator.pack(side=tk.LEFT, padx=(0, 5))
         self.status_circle = self.status_indicator.create_oval(
-            2, 2, 18, 18, fill='gray', outline='black'
+            2, 2, 13, 13, fill='gray', outline='black'
         )
         
-        self.status_text = ttk.Label(indicator_frame, text="No Audio", font=('Arial', 10))
-        self.status_text.pack(side=tk.LEFT)
+        # Status text
+        self.status_text = ttk.Label(status_frame, text="No Audio", font=('Arial', 9))
+        self.status_text.pack(side=tk.LEFT, padx=(0, 10))
         
-        # BPM display (compact)
-        bpm_frame = ttk.Frame(status_frame)
-        bpm_frame.pack(side=tk.LEFT, padx=(0, 20))
-        ttk.Label(bpm_frame, text="BPM:", font=('Arial', 11, 'bold')).pack(side=tk.LEFT)
-        self.bpm_label = ttk.Label(bpm_frame, text="0", font=('Arial', 11))
-        self.bpm_label.pack(side=tk.LEFT, padx=(5, 0))
+        # BPM
+        ttk.Label(status_frame, text="BPM:", font=('Arial', 9, 'bold')).pack(side=tk.LEFT)
+        self.bpm_label = ttk.Label(status_frame, text="0", font=('Arial', 9))
+        self.bpm_label.pack(side=tk.LEFT, padx=(3, 10))
         
-        # Intensity display (compact)
-        intensity_frame = ttk.Frame(status_frame)
-        intensity_frame.pack(side=tk.LEFT)
-        ttk.Label(intensity_frame, text="Level:", font=('Arial', 11, 'bold')).pack(side=tk.LEFT)
-        self.intensity_label = ttk.Label(intensity_frame, text="0%", font=('Arial', 11))
-        self.intensity_label.pack(side=tk.LEFT, padx=(5, 0))
+        # Level
+        ttk.Label(status_frame, text="Level:", font=('Arial', 9, 'bold')).pack(side=tk.LEFT)
+        self.intensity_label = ttk.Label(status_frame, text="0%", font=('Arial', 9))
+        self.intensity_label.pack(side=tk.LEFT, padx=(3, 0))
         
-        # Speed control frame
-        speed_frame = ttk.Frame(main_frame)
-        speed_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        ttk.Label(speed_frame, text="Speed:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
-        
-        # Speed slider (inverted smoothness - 0=slow, 1=fast)
-        self.smoothness_var = tk.DoubleVar(value=0.5)  # Default middle position
-        self.speed_slider = ttk.Scale(
-            speed_frame,
-            from_=0.0,
-            to=1.0,
-            orient=tk.HORIZONTAL,
-            variable=self.smoothness_var,
-            command=self._on_smoothness_change,
-            length=200
+        # Quit button (right side)
+        self.quit_button = ttk.Button(
+            status_frame,
+            text="X",
+            command=self._on_quit,
+            width=3
         )
-        self.speed_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        self.quit_button.pack(side=tk.RIGHT)
         
-        # Speed labels
-        ttk.Label(speed_frame, text="Slow", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Label(speed_frame, text="Fast", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT)
+        # Create two-column layout for sliders
+        controls_container = ttk.Frame(main_frame)
+        controls_container.pack(fill=tk.BOTH, expand=True)
         
-        # Rainbow control frame
-        rainbow_frame = ttk.Frame(main_frame)
-        rainbow_frame.pack(fill=tk.X, pady=(0, 10))
+        # Left column
+        left_col = ttk.Frame(controls_container)
+        left_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 3))
         
-        ttk.Label(rainbow_frame, text="Rainbow:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
+        # Right column
+        right_col = ttk.Frame(controls_container)
+        right_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(3, 0))
         
-        # Rainbow slider (0=single color, 1=full rainbow)
-        self.rainbow_var = tk.DoubleVar(value=0.5)  # Default middle position
-        self.rainbow_slider = ttk.Scale(
-            rainbow_frame,
-            from_=0.0,
-            to=1.0,
-            orient=tk.HORIZONTAL,
-            variable=self.rainbow_var,
-            command=self._on_rainbow_change,
-            length=200
+        # Speed control (left column)
+        self._create_slider_control(
+            left_col, "Speed", 
+            self._on_smoothness_change,
+            0.5, "Slow", "Fast"
         )
-        self.rainbow_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
         
-        # Rainbow labels
-        ttk.Label(rainbow_frame, text="Single", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Label(rainbow_frame, text="Full", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT)
-        
-        # Color Temperature control frame
-        temp_frame = ttk.Frame(main_frame)
-        temp_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        ttk.Label(temp_frame, text="Color Temp:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
-        
-        # Color Temperature slider (0=warm, 1=cool)
-        self.color_temp_var = tk.DoubleVar(value=0.5)  # Default middle position
-        self.color_temp_slider = ttk.Scale(
-            temp_frame,
-            from_=0.0,
-            to=1.0,
-            orient=tk.HORIZONTAL,
-            variable=self.color_temp_var,
-            command=self._on_color_temp_change,
-            length=200
+        # Rainbow control (left column)
+        self._create_slider_control(
+            left_col, "Rainbow",
+            self._on_rainbow_change,
+            0.5, "Single", "Full"
         )
-        self.color_temp_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
         
-        # Color Temp labels
-        ttk.Label(temp_frame, text="Warm", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Label(temp_frame, text="Cool", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT)
-        
-        # Strobe control frame
-        strobe_frame = ttk.Frame(main_frame)
-        strobe_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        ttk.Label(strobe_frame, text="Strobe:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
-        
-        # Strobe slider (0=off, 1=max)
-        self.strobe_var = tk.DoubleVar(value=0.0)  # Default off
-        self.strobe_slider = ttk.Scale(
-            strobe_frame,
-            from_=0.0,
-            to=1.0,
-            orient=tk.HORIZONTAL,
-            variable=self.strobe_var,
-            command=self._on_strobe_change,
-            length=200
+        # Color Temp control (left column)
+        self._create_slider_control(
+            left_col, "Temp",
+            self._on_color_temp_change,
+            0.5, "Warm", "Cool"
         )
-        self.strobe_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
         
-        # Strobe labels
-        ttk.Label(strobe_frame, text="Off", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Label(strobe_frame, text="Max", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT)
+        # Strobe control (right column)
+        self._create_slider_control(
+            right_col, "Strobe",
+            self._on_strobe_change,
+            0.0, "Off", "Max"
+        )
         
-        # Pattern control frame
-        pattern_frame = ttk.Frame(main_frame)
-        pattern_frame.pack(fill=tk.X, pady=(0, 10))
+        # Pattern selector (right column)
+        pattern_frame = ttk.Frame(right_col)
+        pattern_frame.pack(fill=tk.X, pady=(0, 8))
         
-        ttk.Label(pattern_frame, text="Pattern:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Label(pattern_frame, text="Pattern:", font=('Arial', 9, 'bold')).pack(anchor=tk.W)
         
-        # Pattern selector dropdown
-        self.pattern_var = tk.StringVar(value="sync")
+        self.pattern_var = tk.StringVar(value="Sync")
         self.pattern_combo = ttk.Combobox(
             pattern_frame,
             textvariable=self.pattern_var,
             values=["Sync", "Wave", "Center", "Alternate", "Mirror"],
             state="readonly",
-            width=15
+            width=12,
+            font=('Arial', 9)
         )
-        self.pattern_combo.pack(side=tk.LEFT, padx=(0, 10))
+        self.pattern_combo.pack(fill=tk.X, pady=(2, 0))
         self.pattern_combo.bind("<<ComboboxSelected>>", self._on_pattern_change)
         
-        # Control frame
-        control_frame = ttk.Frame(main_frame)
-        control_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        # Quit button
-        self.quit_button = ttk.Button(
-            control_frame,
-            text="Quit",
-            command=self._on_quit,
-            style='Accent.TButton'
-        )
-        self.quit_button.pack(side=tk.RIGHT)
-        
-        # Configure accent button style
-        self.style.configure('Accent.TButton', font=('Arial', 12, 'bold'))
-        
-        # Info label (compact)
+        # Info label at bottom
         self.info_label = ttk.Label(
             main_frame,
-            text="3 PAR Lights • DMX Universe 1",
-            font=('Arial', 9),
+            text="3 PAR • DMX 1",
+            font=('Arial', 8),
             foreground='gray'
         )
-        self.info_label.pack(pady=(5, 0))
+        self.info_label.pack(side=tk.BOTTOM, pady=(2, 0))
+    
+    def _create_slider_control(self, parent, label, command, initial_value, left_label, right_label):
+        """Create a compact slider control with labels."""
+        frame = ttk.Frame(parent)
+        frame.pack(fill=tk.X, pady=(0, 8))
+        
+        # Title
+        ttk.Label(frame, text=f"{label}:", font=('Arial', 9, 'bold')).pack(anchor=tk.W)
+        
+        # Slider frame
+        slider_frame = ttk.Frame(frame)
+        slider_frame.pack(fill=tk.X, pady=(2, 0))
+        
+        # Create variable based on label
+        if label == "Speed":
+            self.smoothness_var = tk.DoubleVar(value=initial_value)
+            var = self.smoothness_var
+        elif label == "Rainbow":
+            self.rainbow_var = tk.DoubleVar(value=initial_value)
+            var = self.rainbow_var
+        elif label == "Temp":
+            self.color_temp_var = tk.DoubleVar(value=initial_value)
+            var = self.color_temp_var
+        elif label == "Strobe":
+            self.strobe_var = tk.DoubleVar(value=initial_value)
+            var = self.strobe_var
+        else:
+            var = tk.DoubleVar(value=initial_value)
+        
+        # Left label
+        ttk.Label(slider_frame, text=left_label, font=('Arial', 8), foreground='gray').pack(side=tk.LEFT)
+        
+        # Slider
+        slider = ttk.Scale(
+            slider_frame,
+            from_=0.0,
+            to=1.0,
+            orient=tk.HORIZONTAL,
+            variable=var,
+            command=command,
+            length=120
+        )
+        slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 5))
+        
+        # Right label
+        ttk.Label(slider_frame, text=right_label, font=('Arial', 8), foreground='gray').pack(side=tk.LEFT)
     
     def _schedule_update(self):
         """Schedule periodic GUI updates."""
@@ -287,7 +268,7 @@ class AudioReactiveLightingGUI:
         if self.dmx_controller:
             self.dmx_controller.set_pattern(pattern)
     
-    def _on_quit(self)
+    def _on_quit(self):
         """Handle quit button click."""
         self.stop_event.set()
         self.root.after(500, self.root.destroy)
