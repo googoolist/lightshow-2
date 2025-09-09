@@ -60,37 +60,6 @@ class AudioReactiveLightingGUI:
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Lighting Mode Buttons (top row)
-        mode_frame = ttk.Frame(main_frame)
-        mode_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        # Create mode buttons
-        self.mode_var = tk.StringVar(value=config.DEFAULT_LIGHTING_MODE)
-        
-        for mode_key, mode_info in config.LIGHTING_MODES.items():
-            btn = ttk.Button(
-                mode_frame,
-                text=mode_info['name'],
-                command=lambda m=mode_key: self._set_mode(m),
-                width=12
-            )
-            btn.pack(side=tk.LEFT, padx=(0, 5))
-            
-            # Highlight current mode
-            if mode_key == config.DEFAULT_LIGHTING_MODE:
-                btn.configure(style='Accent.TButton')
-        
-        self.mode_buttons = {}  # Store buttons for highlighting
-        
-        # Mode description (small text)
-        self.mode_description = ttk.Label(
-            main_frame,
-            text=config.LIGHTING_MODES[config.DEFAULT_LIGHTING_MODE]['description'],
-            font=('Arial', 9),
-            foreground='gray'
-        )
-        self.mode_description.pack(pady=(0, 10))
-        
         # Combined status and metrics frame (no header)
         status_frame = ttk.Frame(main_frame)
         status_frame.pack(fill=tk.X, pady=(0, 10))
@@ -122,16 +91,16 @@ class AudioReactiveLightingGUI:
         self.intensity_label = ttk.Label(intensity_frame, text="0%", font=('Arial', 11))
         self.intensity_label.pack(side=tk.LEFT, padx=(5, 0))
         
-        # Smoothness control frame
-        smooth_frame = ttk.Frame(main_frame)
-        smooth_frame.pack(fill=tk.X, pady=(0, 10))
+        # Speed control frame
+        speed_frame = ttk.Frame(main_frame)
+        speed_frame.pack(fill=tk.X, pady=(0, 10))
         
-        ttk.Label(smooth_frame, text="Smoothness:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Label(speed_frame, text="Speed:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
         
-        # Smoothness slider
+        # Speed slider (inverted smoothness - 0=slow, 1=fast)
         self.smoothness_var = tk.DoubleVar(value=0.5)  # Default middle position
-        self.smoothness_slider = ttk.Scale(
-            smooth_frame,
+        self.speed_slider = ttk.Scale(
+            speed_frame,
             from_=0.0,
             to=1.0,
             orient=tk.HORIZONTAL,
@@ -139,11 +108,98 @@ class AudioReactiveLightingGUI:
             command=self._on_smoothness_change,
             length=200
         )
-        self.smoothness_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        self.speed_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
         
-        # Smoothness labels
-        ttk.Label(smooth_frame, text="Fast", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Label(smooth_frame, text="Smooth", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT)
+        # Speed labels
+        ttk.Label(speed_frame, text="Slow", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(speed_frame, text="Fast", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT)
+        
+        # Rainbow control frame
+        rainbow_frame = ttk.Frame(main_frame)
+        rainbow_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(rainbow_frame, text="Rainbow:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Rainbow slider (0=single color, 1=full rainbow)
+        self.rainbow_var = tk.DoubleVar(value=0.5)  # Default middle position
+        self.rainbow_slider = ttk.Scale(
+            rainbow_frame,
+            from_=0.0,
+            to=1.0,
+            orient=tk.HORIZONTAL,
+            variable=self.rainbow_var,
+            command=self._on_rainbow_change,
+            length=200
+        )
+        self.rainbow_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        
+        # Rainbow labels
+        ttk.Label(rainbow_frame, text="Single", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(rainbow_frame, text="Full", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT)
+        
+        # Color Temperature control frame
+        temp_frame = ttk.Frame(main_frame)
+        temp_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(temp_frame, text="Color Temp:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Color Temperature slider (0=warm, 1=cool)
+        self.color_temp_var = tk.DoubleVar(value=0.5)  # Default middle position
+        self.color_temp_slider = ttk.Scale(
+            temp_frame,
+            from_=0.0,
+            to=1.0,
+            orient=tk.HORIZONTAL,
+            variable=self.color_temp_var,
+            command=self._on_color_temp_change,
+            length=200
+        )
+        self.color_temp_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        
+        # Color Temp labels
+        ttk.Label(temp_frame, text="Warm", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(temp_frame, text="Cool", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT)
+        
+        # Strobe control frame
+        strobe_frame = ttk.Frame(main_frame)
+        strobe_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(strobe_frame, text="Strobe:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Strobe slider (0=off, 1=max)
+        self.strobe_var = tk.DoubleVar(value=0.0)  # Default off
+        self.strobe_slider = ttk.Scale(
+            strobe_frame,
+            from_=0.0,
+            to=1.0,
+            orient=tk.HORIZONTAL,
+            variable=self.strobe_var,
+            command=self._on_strobe_change,
+            length=200
+        )
+        self.strobe_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        
+        # Strobe labels
+        ttk.Label(strobe_frame, text="Off", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(strobe_frame, text="Max", font=('Arial', 9), foreground='gray').pack(side=tk.LEFT)
+        
+        # Pattern control frame
+        pattern_frame = ttk.Frame(main_frame)
+        pattern_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(pattern_frame, text="Pattern:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Pattern selector dropdown
+        self.pattern_var = tk.StringVar(value="sync")
+        self.pattern_combo = ttk.Combobox(
+            pattern_frame,
+            textvariable=self.pattern_var,
+            values=["Sync", "Wave", "Center", "Alternate", "Mirror"],
+            state="readonly",
+            width=15
+        )
+        self.pattern_combo.pack(side=tk.LEFT, padx=(0, 10))
+        self.pattern_combo.bind("<<ComboboxSelected>>", self._on_pattern_change)
         
         # Control frame
         control_frame = ttk.Frame(main_frame)
@@ -199,21 +255,39 @@ class AudioReactiveLightingGUI:
             self.status_indicator.itemconfig(self.status_circle, fill='gray')
             self.status_text.config(text="No Audio")
     
-    def _set_mode(self, mode_key):
-        """Set the lighting mode."""
-        if self.dmx_controller:
-            self.dmx_controller.set_mode(mode_key)
-            self.mode_var.set(mode_key)
-            # Update description
-            self.mode_description.config(text=config.LIGHTING_MODES[mode_key]['description'])
-    
     def _on_smoothness_change(self, value):
-        """Handle smoothness slider change."""
-        smoothness = float(value)
+        """Handle speed slider change (inverted for smoothness)."""
+        # Invert the speed value to get smoothness (0=fast/no smooth, 1=slow/smooth)
+        speed = float(value)
+        smoothness = 1.0 - speed  # Invert: high speed = low smoothness
         if self.dmx_controller:
             self.dmx_controller.set_smoothness(smoothness)
     
-    def _on_quit(self):
+    def _on_rainbow_change(self, value):
+        """Handle rainbow slider change."""
+        rainbow_level = float(value)
+        if self.dmx_controller:
+            self.dmx_controller.set_rainbow_level(rainbow_level)
+    
+    def _on_color_temp_change(self, value):
+        """Handle color temperature slider change."""
+        color_temp = float(value)
+        if self.dmx_controller:
+            self.dmx_controller.set_color_temperature(color_temp)
+    
+    def _on_strobe_change(self, value):
+        """Handle strobe slider change."""
+        strobe_level = float(value)
+        if self.dmx_controller:
+            self.dmx_controller.set_strobe_level(strobe_level)
+    
+    def _on_pattern_change(self, event=None):
+        """Handle pattern selection change."""
+        pattern = self.pattern_var.get().lower()
+        if self.dmx_controller:
+            self.dmx_controller.set_pattern(pattern)
+    
+    def _on_quit(self)
         """Handle quit button click."""
         self.stop_event.set()
         self.root.after(500, self.root.destroy)

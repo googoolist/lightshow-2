@@ -6,6 +6,7 @@ import array
 import threading
 import time
 import math
+import random
 from ola.ClientWrapper import ClientWrapper
 import config
 
@@ -28,59 +29,87 @@ class DmxController:
         self.wrapper = None
         self.client = None
         
-        # Lighting mode
-        self.current_mode = config.DEFAULT_LIGHTING_MODE
-        self.mode_settings = config.LIGHTING_MODES[self.current_mode]
-        self.mode_lock = threading.Lock()
-        
         # Lighting state
         self.current_color_index = 0
-        self.lights_on = [True, True, True]  # Track on/off state for each PAR
         self.beat_flash_time = [0, 0, 0]  # Track flash timing for each PAR
         self.last_beat_time = 0
         
-        # Smooth mode specific state
+        # Color state for smooth transitions
         self.target_colors = [(0, 0, 0)] * 3  # Target colors for each PAR
         self.current_colors = [(0, 0, 0)] * 3  # Current colors for smooth fading
         self.color_fade_progress = [0.0] * 3  # Fade progress for each PAR
         self.last_color_change = 0
         
-        # Smoothness control (0.0 = fast/instant, 1.0 = very smooth/slow)
-        self.smoothness = 0.5  # Default middle position
+        # Control parameters
+        self.smoothness = 0.5  # Default middle position (0.0 = fast, 1.0 = very smooth)
+        self.rainbow_level = 0.5  # Default middle position (0.0 = single color, 1.0 = full rainbow)
+        self.color_temperature = 0.5  # Default middle (0.0 = warm, 1.0 = cool)
+        self.strobe_level = 0.0  # Default off (0.0 = off, 1.0 = max)
+        self.pattern = "sync"  # Default synchronized pattern
+        self.control_lock = threading.Lock()
+        
+        # Initialize colors
+        self._initialize_colors()
         
         # DMX frame update interval (milliseconds)
         self.update_interval = int(1000 / config.UPDATE_FPS)
         
+    def _initialize_colors(self):
+        """Initialize starting colors based on rainbow level and temperature."""
+        with self.control_lock:
+            palette = self._get_color_palette() if hasattr(self, 'color_temperature') else config.SMOOTH_COLOR_PALETTE
+            
+            if self.rainbow_level < 0.2:
+                # Single color mode - all lights same color
+                color = palette[0]
+                for i in range(3):
+                    self.target_colors[i] = color
+                    self.current_colors[i] = color
+            else:
+                # Diverse colors - spread across palette
+                palette_size = len(palette)
+                spread = int(palette_size * self.rainbow_level / 3)
+                for i in range(3):
+                    idx = (i * spread) % palette_size
+                    self.target_colors[i] = palette[idx]
+                    self.current_colors[i] = self.target_colors[i]
+    
     def start(self):
         """Start the DMX control thread."""
         self.thread = threading.Thread(target=self._dmx_loop, daemon=True)
         self.thread.start()
     
-    def set_mode(self, mode_name):
-        """Change the lighting mode."""
-        if mode_name in config.LIGHTING_MODES:
-            with self.mode_lock:
-                self.current_mode = mode_name
-                self.mode_settings = config.LIGHTING_MODES[mode_name]
-                print(f"Lighting mode changed to: {self.mode_settings['name']}")
-                
-                # Reset mode-specific state
-                if mode_name == "smooth":
-                    # Initialize smooth transitions
-                    self.last_color_change = time.time()
-                    for i in range(3):
-                        self.target_colors[i] = config.SMOOTH_COLOR_PALETTE[i % len(config.SMOOTH_COLOR_PALETTE)]
-    
-    def get_current_mode(self):
-        """Get the current lighting mode name."""
-        with self.mode_lock:
-            return self.current_mode
-    
     def set_smoothness(self, value):
         """Set the smoothness level (0.0 = fast, 1.0 = very smooth)."""
-        with self.mode_lock:
+        with self.control_lock:
             self.smoothness = max(0.0, min(1.0, value))
             print(f"Smoothness set to: {self.smoothness:.2f}")
+    
+    def set_rainbow_level(self, value):
+        """Set the rainbow diversity level (0.0 = single color, 1.0 = full rainbow)."""
+        with self.control_lock:
+            self.rainbow_level = max(0.0, min(1.0, value))
+            print(f"Rainbow level set to: {self.rainbow_level:.2f}")
+    
+    def set_color_temperature(self, value):
+        """Set the color temperature (0.0 = warm, 1.0 = cool)."""
+        with self.control_lock:
+            self.color_temperature = max(0.0, min(1.0, value))
+            print(f"Color temperature set to: {self.color_temperature:.2f}")
+    
+    def set_strobe_level(self, value):
+        """Set the strobe intensity (0.0 = off, 1.0 = max)."""
+        with self.control_lock:
+            self.strobe_level = max(0.0, min(1.0, value))
+            print(f"Strobe level set to: {self.strobe_level:.2f}")
+    
+    def set_pattern(self, pattern_name):
+        """Set the lighting pattern (sync, wave, center, alternate, mirror)."""
+        valid_patterns = ["sync", "wave", "center", "alternate", "mirror"]
+        if pattern_name in valid_patterns:
+            with self.control_lock:
+                self.pattern = pattern_name
+                print(f"Pattern set to: {self.pattern}")
     
     def _setup_ola(self):
         """Initialize OLA client connection."""
@@ -136,21 +165,7 @@ class DmxController:
     
     def _compute_dmx_frame(self):
         """Compute the DMX channel values for current frame."""
-        with self.mode_lock:
-            mode = self.current_mode
-            settings = self.mode_settings
-        
-        if mode == "smooth":
-            return self._compute_smooth_frame()
-        elif mode == "rapid":
-            return self._compute_rapid_frame()
-        else:  # classic
-            return self._compute_classic_frame()
-    
-    def _compute_smooth_frame(self):
-        """Compute DMX frame for smooth/mellow mode with fading transitions."""
         data = array.array('B', [0] * config.DMX_CHANNELS)
-        settings = self.mode_settings
         
         # Get current audio state
         audio_state = self.audio_analyzer.get_state()
@@ -170,59 +185,29 @@ class DmxController:
             except:
                 break
         
-        # Smooth color transitions
-        current_time = time.time()
-        
-        # Change target colors gradually (every 4-8 seconds or on strong beats)
-        if current_time - self.last_color_change > 6.0 or (beat_occurred and intensity > 0.7):
-            self.last_color_change = current_time
-            # Rotate through extended color palette
-            for i in range(3):
-                current_idx = config.SMOOTH_COLOR_PALETTE.index(self.target_colors[i]) if self.target_colors[i] in config.SMOOTH_COLOR_PALETTE else 0
-                next_idx = (current_idx + 1 + i) % len(config.SMOOTH_COLOR_PALETTE)
-                self.target_colors[i] = config.SMOOTH_COLOR_PALETTE[next_idx]
-                self.color_fade_progress[i] = 0.0
-        
-        # Update fade progress for each light
-        # Dynamic fade speed based on smoothness slider
-        # Smoothness 0.0 = instant (fade_speed = 1.0)
-        # Smoothness 0.5 = moderate (fade_speed = 0.02-0.05)
-        # Smoothness 1.0 = very slow (fade_speed = 0.005)
-        fade_speed = 0.005 + (1.0 - self.smoothness) * 0.995  # Inverse relationship
-        
-        for i in range(3):
-            if self.color_fade_progress[i] < 1.0:
-                self.color_fade_progress[i] = min(1.0, self.color_fade_progress[i] + fade_speed)
-                
-                # Interpolate between current and target colors
-                r_current, g_current, b_current = self.current_colors[i]
-                r_target, g_target, b_target = self.target_colors[i]
-                
-                progress = self.color_fade_progress[i]
-                # Smooth ease-in-out interpolation
-                smooth_progress = 0.5 - 0.5 * math.cos(progress * math.pi) if 'math' in dir() else progress
-                
-                self.current_colors[i] = (
-                    int(r_current + (r_target - r_current) * smooth_progress),
-                    int(g_current + (g_target - g_current) * smooth_progress),
-                    int(b_current + (b_target - b_current) * smooth_progress)
-                )
+        # Update colors
+        self._update_colors(beat_occurred, intensity)
         
         # Apply colors to DMX channels
+        current_time = time.time()
+        settings = config.LIGHTING_SETTINGS
+        
         for i, fixture in enumerate(config.LIGHT_FIXTURES):
             base_channel = fixture['start_channel'] - 1
             channels = fixture['channels']
             
-            r, g, b = self.current_colors[i]
+            # Apply pattern-based color selection
+            r, g, b = self._apply_pattern(i, current_time)
             
-            # Gentle intensity modulation with beat response
-            # Smoothness affects beat response intensity
+            # Calculate brightness with beat response
             beat_boost = 0
             if beat_occurred:
                 time_since_beat = current_time - self.last_beat_time
-                beat_duration = settings['beat_flash_duration'] * (1.0 + self.smoothness * 2.0)  # Longer flash when smoother
+                # Beat flash duration affected by smoothness
+                beat_duration = settings['beat_flash_duration'] * (1.0 + self.smoothness * 2.0)
                 if time_since_beat < beat_duration:
-                    beat_response = settings['beat_response'] * (1.0 - self.smoothness * 0.5)  # Gentler response when smoother
+                    # Beat response intensity affected by smoothness
+                    beat_response = settings['beat_response'] * (1.0 - self.smoothness * 0.5)
                     beat_boost = beat_response * (1 - time_since_beat / beat_duration)
             
             brightness = min(1.0, intensity * settings['brightness_base'] + beat_boost)
@@ -240,184 +225,196 @@ class DmxController:
                 data[base_channel + channels['green']] = int(g * scale)
             if 'blue' in channels:
                 data[base_channel + channels['blue']] = int(b * scale)
+            
+            # Apply strobe effect on strong beats
+            if 'strobe' in channels and self.strobe_level > 0:
+                if beat_occurred and intensity > (1.0 - self.strobe_level * 0.5):
+                    # Strobe intensity based on slider (0-255)
+                    strobe_value = int(self.strobe_level * 255)
+                    data[base_channel + channels['strobe']] = strobe_value
+                else:
+                    data[base_channel + channels['strobe']] = 0
         
         return data
     
-    def _compute_rapid_frame(self):
-        """Compute DMX frame for rapid beat-sync mode."""
-        data = array.array('B', [0] * config.DMX_CHANNELS)
-        settings = self.mode_settings
-        
-        # Get current audio state
-        audio_state = self.audio_analyzer.get_state()
-        intensity = audio_state['intensity']
-        audio_active = audio_state['audio_active']
-        
-        if not audio_active:
-            return data
-        
-        # Process beat events
-        beat_occurred = False
-        while not self.beat_queue.empty():
-            try:
-                self.beat_queue.get_nowait()
-                beat_occurred = True
-                self.last_beat_time = time.time()
-            except:
-                break
-        
-        # Rapid beat response
-        if beat_occurred:
-            self._handle_beat_event()
-        
-        # Get color palette (use extended palette for variety)
-        colors = config.SMOOTH_COLOR_PALETTE if self.current_mode == "rapid" else config.COLOR_PRESETS
-        color = colors[self.current_color_index % len(colors)]
-        
-        # Process each PAR light with rapid changes
-        for i, fixture in enumerate(config.LIGHT_FIXTURES):
-            base_channel = fixture['start_channel'] - 1
-            channels = fixture['channels']
+    def _apply_pattern(self, light_index, current_time):
+        """Apply pattern-based color selection for each light."""
+        if self.pattern == "sync":
+            # All lights show same color
+            return self.current_colors[light_index]
             
-            # Strong beat flash effect (modified by smoothness)
-            # Less smoothness = shorter, more intense flashes
-            flash_duration = settings['beat_flash_duration'] * (0.5 + self.smoothness * 1.5)
-            flash_active = (time.time() - self.beat_flash_time[i]) < flash_duration
+        elif self.pattern == "wave":
+            # Colors flow from left to right
+            wave_speed = 2.0 * (1.0 - self.smoothness * 0.5)  # Speed affected by smoothness
+            wave_offset = int((current_time * wave_speed) % 3)
+            color_idx = (light_index + wave_offset) % 3
+            return self.current_colors[color_idx]
             
-            if settings['alternating']:
-                light_active = self.lights_on[i]
+        elif self.pattern == "center":
+            # Center light leads, outer lights follow
+            if light_index == 1:  # Center light (PAR2)
+                return self.current_colors[1]
+            else:  # Outer lights mirror center with delay
+                delay_frames = int(10 * self.smoothness)  # More delay when smoother
+                return self.current_colors[1] if delay_frames == 0 else self.current_colors[light_index]
+                
+        elif self.pattern == "alternate":
+            # Lights alternate between two color groups
+            beat_phase = int(current_time * 2) % 2
+            if light_index == 1:  # Center always active
+                return self.current_colors[1]
+            elif (light_index == 0 and beat_phase == 0) or (light_index == 2 and beat_phase == 1):
+                return self.current_colors[light_index]
             else:
-                light_active = True
-            
-            if light_active:
-                # Rapid intensity changes (smoothness affects transition speed)
-                if flash_active:
-                    # Smoothness affects flash intensity
-                    flash_intensity = 1.0 - (self.smoothness * 0.3)  # Less intense when smoother
-                    brightness = int(255 * flash_intensity)
-                else:
-                    brightness = int(intensity * 255 * settings['brightness_base'])
+                # Dim the inactive lights
+                r, g, b = self.current_colors[light_index]
+                dim_factor = 0.3
+                return (int(r * dim_factor), int(g * dim_factor), int(b * dim_factor))
                 
-                if 'dimmer' in channels:
-                    data[base_channel + channels['dimmer']] = brightness
-                    scale = 1.0
-                else:
-                    scale = brightness / 255.0
+        elif self.pattern == "mirror":
+            # Outer lights mirror each other, center is unique
+            if light_index == 1:  # Center light
+                return self.current_colors[1]
+            else:  # Outer lights use same color
+                return self.current_colors[0]
                 
-                # Use different colors for each light in rapid mode
-                if settings['alternating'] and i > 0:
-                    offset_color = colors[(self.current_color_index + i) % len(colors)]
-                    r, g, b = offset_color
-                else:
-                    r, g, b = color
-                
-                if 'red' in channels:
-                    data[base_channel + channels['red']] = int(r * scale)
-                if 'green' in channels:
-                    data[base_channel + channels['green']] = int(g * scale)
-                if 'blue' in channels:
-                    data[base_channel + channels['blue']] = int(b * scale)
-                
-                # Strong strobe on beat
-                if 'strobe' in channels and flash_active:
-                    data[base_channel + channels['strobe']] = 255
-        
-        return data
-    
-    def _compute_classic_frame(self):
-        """Compute DMX frame for classic mode (original behavior)."""
-        data = array.array('B', [0] * config.DMX_CHANNELS)
-        settings = self.mode_settings
-        
-        # Get current audio state
-        audio_state = self.audio_analyzer.get_state()
-        intensity = audio_state['intensity']
-        audio_active = audio_state['audio_active']
-        
-        if not audio_active:
-            return data
-        
-        # Process beat events
-        beat_occurred = False
-        while not self.beat_queue.empty():
-            try:
-                self.beat_queue.get_nowait()
-                beat_occurred = True
-                self.last_beat_time = time.time()
-            except:
-                break
-        
-        if beat_occurred:
-            self._handle_beat_event()
-        
-        color = config.COLOR_PRESETS[self.current_color_index]
-        
-        # Process each PAR light
-        for i, fixture in enumerate(config.LIGHT_FIXTURES):
-            base_channel = fixture['start_channel'] - 1
-            channels = fixture['channels']
-            
-            # Flash duration affected by smoothness
-            flash_duration = settings['beat_flash_duration'] * (0.5 + self.smoothness * 1.5)
-            flash_active = (time.time() - self.beat_flash_time[i]) < flash_duration
-            
-            if flash_active:
-                # Smoothness affects flash intensity
-                flash_intensity = 1.0 - (self.smoothness * 0.2)  # Slightly less reduction than rapid mode
-                brightness = int(255 * flash_intensity)
-            else:
-                brightness = int(intensity * 255 * settings['brightness_base'])
-            
-            if settings['alternating']:
-                light_active = self.lights_on[i]
-            else:
-                light_active = True
-            
-            if light_active:
-                if 'dimmer' in channels:
-                    data[base_channel + channels['dimmer']] = brightness
-                    scale = 1.0
-                else:
-                    scale = brightness / 255.0
-                
-                if 'red' in channels:
-                    data[base_channel + channels['red']] = int(color[0] * scale)
-                if 'green' in channels:
-                    data[base_channel + channels['green']] = int(color[1] * scale)
-                if 'blue' in channels:
-                    data[base_channel + channels['blue']] = int(color[2] * scale)
-        
-        return data
-    
-    def _handle_beat_event(self):
-        """Process a beat event - update colors and light states."""
-        settings = self.mode_settings
-        
-        # Cycle colors if enabled
-        if settings['color_cycle_on_beat']:
-            self.current_color_index = (self.current_color_index + 1) % len(config.COLOR_PRESETS)
-        
-        # Handle alternating mode
-        if settings['alternating']:
-            # Create different patterns for 3 lights
-            beat_count = int(time.time() * 2) % 3  # Simple pattern counter
-            
-            # Pattern 1: Rotate which light is on
-            if beat_count == 0:
-                self.lights_on = [True, False, False]
-            elif beat_count == 1:
-                self.lights_on = [False, True, False]
-            else:
-                self.lights_on = [False, False, True]
-            
-            # Set flash time for active lights
-            for i in range(3):
-                if self.lights_on[i]:
-                    self.beat_flash_time[i] = time.time()
         else:
-            # All lights flash together
+            # Default to sync
+            return self.current_colors[light_index]
+    
+    def _update_colors(self, beat_occurred, intensity):
+        """Update color transitions based on rainbow level and beats."""
+        with self.control_lock:
+            current_time = time.time()
+            
+            # Determine color change frequency based on rainbow level
+            if self.rainbow_level < 0.2:
+                # Single color mode - change slowly
+                change_interval = 8.0 + self.smoothness * 4.0  # 8-12 seconds
+                change_on_beat = False
+            elif self.rainbow_level < 0.5:
+                # Moderate diversity - change occasionally
+                change_interval = 4.0 + self.smoothness * 2.0  # 4-6 seconds
+                change_on_beat = beat_occurred and intensity > 0.6
+            elif self.rainbow_level < 0.8:
+                # High diversity - change frequently
+                change_interval = 2.0 + self.smoothness * 1.0  # 2-3 seconds
+                change_on_beat = beat_occurred and intensity > 0.4
+            else:
+                # Full rainbow - change on every beat or quickly
+                change_interval = 1.0 + self.smoothness * 0.5  # 1-1.5 seconds
+                change_on_beat = beat_occurred
+            
+            # Check if it's time to change colors
+            time_to_change = current_time - self.last_color_change > change_interval
+            
+            if time_to_change or change_on_beat:
+                self.last_color_change = current_time
+                self._select_new_colors()
+            
+            # Update fade progress for smooth transitions
+            self._update_color_fades()
+    
+    def _get_color_palette(self):
+        """Get the appropriate color palette based on temperature setting."""
+        if self.color_temperature < 0.3:
+            # Warm colors
+            return config.WARM_COLOR_PALETTE
+        elif self.color_temperature > 0.7:
+            # Cool colors
+            return config.COOL_COLOR_PALETTE
+        else:
+            # Mixed palette - blend warm and cool
+            warm_weight = 1.0 - ((self.color_temperature - 0.3) / 0.4)
+            palette = []
+            # Mix palettes based on temperature
+            for i in range(max(len(config.WARM_COLOR_PALETTE), len(config.COOL_COLOR_PALETTE))):
+                if random.random() < warm_weight:
+                    idx = i % len(config.WARM_COLOR_PALETTE)
+                    palette.append(config.WARM_COLOR_PALETTE[idx])
+                else:
+                    idx = i % len(config.COOL_COLOR_PALETTE)
+                    palette.append(config.COOL_COLOR_PALETTE[idx])
+            return palette if palette else config.SMOOTH_COLOR_PALETTE
+    
+    def _select_new_colors(self):
+        """Select new target colors based on rainbow level and color temperature."""
+        palette = self._get_color_palette()
+        palette_size = len(palette)
+        
+        if self.rainbow_level < 0.2:
+            # Single color mode - all lights same color
+            # Move to next color in palette
+            current_idx = 0
+            for color in palette:
+                if color == self.target_colors[0]:
+                    current_idx = palette.index(color)
+                    break
+            next_idx = (current_idx + 1) % palette_size
+            new_color = palette[next_idx]
+            
             for i in range(3):
-                self.beat_flash_time[i] = time.time()
+                self.target_colors[i] = new_color
+                self.color_fade_progress[i] = 0.0
+                
+        elif self.rainbow_level < 0.5:
+            # Moderate diversity - lights have related colors
+            base_idx = random.randint(0, palette_size - 1)
+            spread = int(palette_size * 0.3)  # Colors within 30% of palette
+            
+            for i in range(3):
+                offset = i * spread // 3
+                idx = (base_idx + offset) % palette_size
+                self.target_colors[i] = palette[idx]
+                self.color_fade_progress[i] = 0.0
+                
+        elif self.rainbow_level < 0.8:
+            # High diversity - lights have different colors
+            indices = []
+            spread = palette_size // 3
+            
+            for i in range(3):
+                idx = (i * spread + random.randint(0, spread-1)) % palette_size
+                indices.append(idx)
+            
+            for i in range(3):
+                self.target_colors[i] = palette[indices[i]]
+                self.color_fade_progress[i] = 0.0
+                
+        else:
+            # Full rainbow - maximum color diversity
+            # Each light gets a random color from different parts of palette
+            indices = random.sample(range(palette_size), min(3, palette_size))
+            
+            for i in range(3):
+                self.target_colors[i] = palette[indices[i]]
+                self.color_fade_progress[i] = 0.0
+    
+    def _update_color_fades(self):
+        """Update the fade progress for color transitions."""
+        # Calculate fade speed based on smoothness
+        # Smoothness 0.0 = instant (fade_speed = 1.0)
+        # Smoothness 0.5 = moderate (fade_speed = 0.02-0.05)
+        # Smoothness 1.0 = very slow (fade_speed = 0.005)
+        fade_speed = 0.005 + (1.0 - self.smoothness) * 0.995
+        
+        for i in range(3):
+            if self.color_fade_progress[i] < 1.0:
+                self.color_fade_progress[i] = min(1.0, self.color_fade_progress[i] + fade_speed)
+                
+                # Interpolate between current and target colors
+                r_current, g_current, b_current = self.current_colors[i]
+                r_target, g_target, b_target = self.target_colors[i]
+                
+                progress = self.color_fade_progress[i]
+                # Smooth ease-in-out interpolation
+                smooth_progress = 0.5 - 0.5 * math.cos(progress * math.pi)
+                
+                self.current_colors[i] = (
+                    int(r_current + (r_target - r_current) * smooth_progress),
+                    int(g_current + (g_target - g_current) * smooth_progress),
+                    int(b_current + (b_target - b_current) * smooth_progress)
+                )
     
     def stop(self):
         """Stop the DMX control thread."""

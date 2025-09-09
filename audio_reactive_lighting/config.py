@@ -77,45 +77,13 @@ COLOR_PRESETS = [
     (128, 0, 255),    # Purple
 ]
 
-# Lighting modes
-LIGHTING_MODES = {
-    "smooth": {
-        "name": "Smooth & Mellow",
-        "description": "Gentle fading transitions with rich colors",
-        "brightness_base": 0.7,
-        "intensity_smoothing": 0.9,
-        "beat_flash_duration": 0.3,
-        "alternating": False,
-        "color_cycle_on_beat": False,
-        "fade_speed": 0.02,  # Slow fade between colors
-        "beat_response": 0.3,  # Subtle beat response
-    },
-    "rapid": {
-        "name": "Rapid Beat Sync",
-        "description": "Fast changes synchronized to beat",
-        "brightness_base": 1.0,
-        "intensity_smoothing": 0.3,
-        "beat_flash_duration": 0.05,
-        "alternating": True,
-        "color_cycle_on_beat": True,
-        "fade_speed": 0,  # No fading, instant changes
-        "beat_response": 1.0,  # Strong beat response
-    },
-    "classic": {
-        "name": "Classic",
-        "description": "Original configuration",
-        "brightness_base": 1.0,
-        "intensity_smoothing": 0.7,
-        "beat_flash_duration": 0.1,
-        "alternating": True,
-        "color_cycle_on_beat": True,
-        "fade_speed": 0,
-        "beat_response": 0.7,
-    }
+# Default lighting settings (Smooth & Mellow base)
+LIGHTING_SETTINGS = {
+    "brightness_base": 0.8,
+    "intensity_smoothing": 0.9,
+    "beat_flash_duration": 0.3,
+    "beat_response": 0.4,  # Subtle beat response
 }
-
-# Default mode
-DEFAULT_LIGHTING_MODE = "classic"
 
 # Extended color palette for smooth mode
 SMOOTH_COLOR_PALETTE = [
@@ -135,8 +103,40 @@ SMOOTH_COLOR_PALETTE = [
     (255, 0, 128),    # Pink
 ]
 
+# Warm color palette (reds, oranges, yellows)
+WARM_COLOR_PALETTE = [
+    (255, 0, 0),      # Red
+    (255, 32, 0),     # Red-orange
+    (255, 64, 0),     # Orange-red
+    (255, 96, 0),     # Deep orange
+    (255, 128, 0),    # Orange
+    (255, 160, 0),    # Light orange
+    (255, 192, 0),    # Gold
+    (255, 224, 0),    # Golden yellow
+    (255, 255, 0),    # Yellow
+    (255, 255, 64),   # Light yellow
+    (255, 192, 128),  # Peach
+    (255, 128, 64),   # Coral
+]
+
+# Cool color palette (blues, purples, cyans)
+COOL_COLOR_PALETTE = [
+    (0, 0, 255),      # Blue
+    (0, 64, 255),     # Light blue
+    (0, 128, 255),    # Sky blue
+    (0, 192, 255),    # Bright sky
+    (0, 255, 255),    # Cyan
+    (0, 255, 192),    # Aqua
+    (0, 255, 128),    # Teal
+    (64, 128, 255),   # Periwinkle
+    (128, 0, 255),    # Purple
+    (192, 0, 255),    # Violet
+    (255, 0, 255),    # Magenta
+    (255, 0, 192),    # Pink-purple
+]
+
 # GUI settings
 GUI_UPDATE_INTERVAL = 200          # GUI refresh interval in milliseconds
-WINDOW_WIDTH = 450
-WINDOW_HEIGHT = 250                # Compact design with smoothness slider
+WINDOW_WIDTH = 480                 # Width for small touchscreen
+WINDOW_HEIGHT = 320                # Height for small touchscreen (landscape orientation)
 FULLSCREEN = False                 # Set to True for fullscreen kiosk mode (ESC or Q to exit)
