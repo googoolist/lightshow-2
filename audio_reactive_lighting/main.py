@@ -81,6 +81,7 @@ class AudioReactiveLightingSystem:
                 print("Starting GUI...")
                 self.gui = AudioReactiveLightingGUI(
                     self.audio_analyzer,
+                    self.dmx_controller,
                     self.stop_event
                 )
                 self.gui.run()

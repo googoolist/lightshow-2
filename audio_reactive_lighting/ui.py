@@ -9,15 +9,17 @@ import config
 
 
 class AudioReactiveLightingGUI:
-    def __init__(self, audio_analyzer, stop_event):
+    def __init__(self, audio_analyzer, dmx_controller, stop_event):
         """
         Initialize the GUI.
         
         Args:
             audio_analyzer: Reference to audio analyzer for state access
+            dmx_controller: Reference to DMX controller for mode changes
             stop_event: Threading event to signal shutdown
         """
         self.audio_analyzer = audio_analyzer
+        self.dmx_controller = dmx_controller
         self.stop_event = stop_event
         
         # Create main window
@@ -110,6 +112,35 @@ class AudioReactiveLightingGUI:
             2, 2, 18, 18, fill='darkgray', outline='black'
         )
         
+        # Lighting Mode Frame
+        mode_frame = ttk.LabelFrame(main_frame, text="Lighting Mode", padding="10")
+        mode_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        # Create radio buttons for each mode
+        self.mode_var = tk.StringVar(value=config.DEFAULT_LIGHTING_MODE)
+        
+        mode_buttons_frame = ttk.Frame(mode_frame)
+        mode_buttons_frame.pack(fill=tk.X)
+        
+        for mode_key, mode_info in config.LIGHTING_MODES.items():
+            rb = ttk.Radiobutton(
+                mode_buttons_frame,
+                text=mode_info['name'],
+                variable=self.mode_var,
+                value=mode_key,
+                command=self._on_mode_change
+            )
+            rb.pack(side=tk.LEFT, padx=(0, 15))
+        
+        # Mode description label
+        self.mode_description = ttk.Label(
+            mode_frame,
+            text=config.LIGHTING_MODES[config.DEFAULT_LIGHTING_MODE]['description'],
+            font=('Arial', 10),
+            foreground='gray'
+        )
+        self.mode_description.pack(pady=(5, 0))
+        
         # Control frame
         control_frame = ttk.Frame(main_frame)
         control_frame.pack(fill=tk.X, pady=(0, 10))
@@ -175,6 +206,14 @@ class AudioReactiveLightingGUI:
                 self.beat_canvas.itemconfig(self.beat_circle, fill='red')
             else:
                 self.beat_canvas.itemconfig(self.beat_circle, fill='darkgray')
+    
+    def _on_mode_change(self):
+        """Handle lighting mode change."""
+        new_mode = self.mode_var.get()
+        if self.dmx_controller:
+            self.dmx_controller.set_mode(new_mode)
+            # Update description
+            self.mode_description.config(text=config.LIGHTING_MODES[new_mode]['description'])
     
     def _on_quit(self):
         """Handle quit button click."""
