@@ -116,10 +116,17 @@ class DmxController:
     
     def set_light_count(self, count):
         """Set the number of active lights."""
+        new_count = max(1, min(count, config.MAX_LIGHTS))
         with self.control_lock:
-            self.active_lights = max(1, min(count, config.MAX_LIGHTS))
-            print(f"Active lights set to: {self.active_lights}")
-            # Reinitialize colors for new light count
+            if self.active_lights != new_count:
+                self.active_lights = new_count
+                print(f"Active lights set to: {self.active_lights}")
+                needs_reinit = True
+            else:
+                needs_reinit = False
+        
+        # Reinitialize colors outside the lock if count changed
+        if needs_reinit:
             self._initialize_colors()
     
     def _setup_ola(self):

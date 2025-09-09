@@ -264,8 +264,7 @@ class AudioReactiveLightingGUI:
             self._on_brightness_change(self.brightness_var.get())
             self._on_strobe_change(self.strobe_var.get())
             self._on_pattern_change()
-            # Set initial light count
-            self.dmx_controller.set_light_count(self.light_count_var.get())
+            # Don't set light count on startup - controller already has default
     
     def _schedule_update(self):
         """Schedule periodic GUI updates."""
