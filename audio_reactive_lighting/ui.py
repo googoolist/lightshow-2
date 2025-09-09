@@ -106,25 +106,25 @@ class AudioReactiveLightingGUI:
         right_col = ttk.Frame(controls_container)
         right_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(3, 0))
         
-        # Speed control (left column)
+        # Speed control (left column) - default to slow for relaxing effect
         self._create_slider_control(
             left_col, "Speed", 
             self._on_smoothness_change,
-            0.5, "Slow", "Fast"
+            0.25, "Slow", "Fast"  # 0.25 speed = 0.75 smoothness
         )
         
-        # Rainbow control (left column)
+        # Rainbow control (left column) - gentle diversity
         self._create_slider_control(
             left_col, "Rainbow",
             self._on_rainbow_change,
-            0.5, "Single", "Full"
+            0.3, "Single", "Full"  # Gentle color variety
         )
         
-        # Color Temp control (left column)
+        # Brightness control (left column) - default to moderate brightness
         self._create_slider_control(
-            left_col, "Temp",
-            self._on_color_temp_change,
-            0.5, "Warm", "Cool"
+            left_col, "Brightness",
+            self._on_brightness_change,
+            0.6, "Dim", "Bright"  # Default 60% for ambient lighting
         )
         
         # Strobe control (right column)
@@ -140,7 +140,7 @@ class AudioReactiveLightingGUI:
         
         ttk.Label(pattern_frame, text="Pattern:", font=('Arial', 9, 'bold')).pack(anchor=tk.W)
         
-        self.pattern_var = tk.StringVar(value="Sync")
+        self.pattern_var = tk.StringVar(value="Wave")  # Default to Wave for flowing effect
         self.pattern_combo = ttk.Combobox(
             pattern_frame,
             textvariable=self.pattern_var,
@@ -180,9 +180,9 @@ class AudioReactiveLightingGUI:
         elif label == "Rainbow":
             self.rainbow_var = tk.DoubleVar(value=initial_value)
             var = self.rainbow_var
-        elif label == "Temp":
-            self.color_temp_var = tk.DoubleVar(value=initial_value)
-            var = self.color_temp_var
+        elif label == "Brightness":
+            self.brightness_var = tk.DoubleVar(value=initial_value)
+            var = self.brightness_var
         elif label == "Strobe":
             self.strobe_var = tk.DoubleVar(value=initial_value)
             var = self.strobe_var
@@ -250,11 +250,11 @@ class AudioReactiveLightingGUI:
         if self.dmx_controller:
             self.dmx_controller.set_rainbow_level(rainbow_level)
     
-    def _on_color_temp_change(self, value):
-        """Handle color temperature slider change."""
-        color_temp = float(value)
+    def _on_brightness_change(self, value):
+        """Handle brightness slider change."""
+        brightness = float(value)
         if self.dmx_controller:
-            self.dmx_controller.set_color_temperature(color_temp)
+            self.dmx_controller.set_brightness(brightness)
     
     def _on_strobe_change(self, value):
         """Handle strobe slider change."""

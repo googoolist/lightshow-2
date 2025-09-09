@@ -40,12 +40,12 @@ class DmxController:
         self.color_fade_progress = [0.0] * 3  # Fade progress for each PAR
         self.last_color_change = 0
         
-        # Control parameters
-        self.smoothness = 0.5  # Default middle position (0.0 = fast, 1.0 = very smooth)
-        self.rainbow_level = 0.5  # Default middle position (0.0 = single color, 1.0 = full rainbow)
-        self.color_temperature = 0.5  # Default middle (0.0 = warm, 1.0 = cool)
+        # Control parameters - defaults for relaxing smooth waves
+        self.smoothness = 0.75  # Default to smooth transitions (0.0 = fast, 1.0 = very smooth)
+        self.rainbow_level = 0.3  # Gentle color diversity (0.0 = single color, 1.0 = full rainbow)
+        self.brightness_control = 0.6  # Master brightness control (0.0 = dim, 1.0 = full)
         self.strobe_level = 0.0  # Default off (0.0 = off, 1.0 = max)
-        self.pattern = "sync"  # Default synchronized pattern
+        self.pattern = "wave"  # Default to wave pattern for flowing effect
         self.control_lock = threading.Lock()
         
         # Initialize colors
@@ -55,9 +55,9 @@ class DmxController:
         self.update_interval = int(1000 / config.UPDATE_FPS)
         
     def _initialize_colors(self):
-        """Initialize starting colors based on rainbow level and temperature."""
+        """Initialize starting colors based on rainbow level."""
         with self.control_lock:
-            palette = self._get_color_palette() if hasattr(self, 'color_temperature') else config.SMOOTH_COLOR_PALETTE
+            palette = config.SMOOTH_COLOR_PALETTE
             
             if self.rainbow_level < 0.2:
                 # Single color mode - all lights same color
@@ -91,11 +91,11 @@ class DmxController:
             self.rainbow_level = max(0.0, min(1.0, value))
             print(f"Rainbow level set to: {self.rainbow_level:.2f}")
     
-    def set_color_temperature(self, value):
-        """Set the color temperature (0.0 = warm, 1.0 = cool)."""
+    def set_brightness(self, value):
+        """Set the master brightness level (0.0 = dim, 1.0 = full brightness)."""
         with self.control_lock:
-            self.color_temperature = max(0.0, min(1.0, value))
-            print(f"Color temperature set to: {self.color_temperature:.2f}")
+            self.brightness_control = max(0.0, min(1.0, value))
+            print(f"Brightness set to: {self.brightness_control:.2f}")
     
     def set_strobe_level(self, value):
         """Set the strobe intensity (0.0 = off, 1.0 = max)."""
@@ -211,7 +211,9 @@ class DmxController:
                     beat_response = settings['beat_response'] * (1.0 - self.smoothness * 0.7)
                     beat_boost = beat_response * (1 - time_since_beat / beat_duration)
             
+            # Apply master brightness control on top of calculated brightness
             brightness = min(1.0, intensity * settings['brightness_base'] + beat_boost)
+            brightness *= self.brightness_control  # Apply master brightness slider
             
             # Set DMX values
             if 'dimmer' in channels:
@@ -317,31 +319,9 @@ class DmxController:
             # Update fade progress for smooth transitions
             self._update_color_fades()
     
-    def _get_color_palette(self):
-        """Get the appropriate color palette based on temperature setting."""
-        if self.color_temperature < 0.3:
-            # Warm colors
-            return config.WARM_COLOR_PALETTE
-        elif self.color_temperature > 0.7:
-            # Cool colors
-            return config.COOL_COLOR_PALETTE
-        else:
-            # Mixed palette - blend warm and cool
-            warm_weight = 1.0 - ((self.color_temperature - 0.3) / 0.4)
-            palette = []
-            # Mix palettes based on temperature
-            for i in range(max(len(config.WARM_COLOR_PALETTE), len(config.COOL_COLOR_PALETTE))):
-                if random.random() < warm_weight:
-                    idx = i % len(config.WARM_COLOR_PALETTE)
-                    palette.append(config.WARM_COLOR_PALETTE[idx])
-                else:
-                    idx = i % len(config.COOL_COLOR_PALETTE)
-                    palette.append(config.COOL_COLOR_PALETTE[idx])
-            return palette if palette else config.SMOOTH_COLOR_PALETTE
-    
     def _select_new_colors(self):
-        """Select new target colors based on rainbow level and color temperature."""
-        palette = self._get_color_palette()
+        """Select new target colors based on rainbow level."""
+        palette = config.SMOOTH_COLOR_PALETTE
         palette_size = len(palette)
         
         if self.rainbow_level < 0.2:
@@ -394,11 +374,12 @@ class DmxController:
     
     def _update_color_fades(self):
         """Update the fade progress for color transitions."""
-        # Calculate fade speed based on smoothness (doubled range)
+        # Calculate fade speed based on smoothness (ultra smooth range)
         # Smoothness 0.0 = instant (fade_speed = 1.0)
-        # Smoothness 0.5 = moderate (fade_speed = 0.01-0.02)
-        # Smoothness 1.0 = ultra slow (fade_speed = 0.0025) - 2x slower than before
-        fade_speed = 0.0025 + (1.0 - self.smoothness) * 0.9975
+        # Smoothness 0.5 = slow (fade_speed = ~0.008)
+        # Smoothness 0.75 = very slow (fade_speed = ~0.004) - default
+        # Smoothness 1.0 = ultra slow (fade_speed = 0.001) - extremely gentle
+        fade_speed = 0.001 + (1.0 - self.smoothness) * 0.999
         
         for i in range(3):
             if self.color_fade_progress[i] < 1.0:

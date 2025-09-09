@@ -77,12 +77,12 @@ COLOR_PRESETS = [
     (128, 0, 255),    # Purple
 ]
 
-# Default lighting settings (Smooth & Mellow base)
+# Default lighting settings (Ultra smooth relaxing waves)
 LIGHTING_SETTINGS = {
-    "brightness_base": 0.8,
-    "intensity_smoothing": 0.9,
-    "beat_flash_duration": 0.3,
-    "beat_response": 0.4,  # Subtle beat response
+    "brightness_base": 0.6,        # Softer base brightness for ambiance
+    "intensity_smoothing": 0.95,   # Very smooth intensity changes
+    "beat_flash_duration": 0.5,    # Longer, gentler beat flashes
+    "beat_response": 0.2,          # Very subtle beat response
 }
 
 # Extended color palette for smooth mode
