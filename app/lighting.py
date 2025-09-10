@@ -86,25 +86,25 @@ class DmxController:
         """Set the smoothness level (0.0 = fast, 1.0 = very smooth)."""
         with self.control_lock:
             self.smoothness = max(0.0, min(1.0, value))
-            print(f"Smoothness set to: {self.smoothness:.2f}")
+            # Remove print to avoid I/O blocking while holding lock
     
     def set_rainbow_level(self, value):
         """Set the rainbow diversity level (0.0 = single color, 1.0 = full rainbow)."""
         with self.control_lock:
             self.rainbow_level = max(0.0, min(1.0, value))
-            print(f"Rainbow level set to: {self.rainbow_level:.2f}")
+            # Remove print to avoid I/O blocking while holding lock
     
     def set_brightness(self, value):
         """Set the master brightness level (0.0 = dim, 1.0 = full brightness)."""
         with self.control_lock:
             self.brightness_control = max(0.0, min(1.0, value))
-            print(f"Brightness set to: {self.brightness_control:.2f}")
+            # Remove print to avoid I/O blocking while holding lock
     
     def set_strobe_level(self, value):
         """Set the strobe intensity (0.0 = off, 1.0 = max)."""
         with self.control_lock:
             self.strobe_level = max(0.0, min(1.0, value))
-            print(f"Strobe level set to: {self.strobe_level:.2f}")
+            # Remove print to avoid I/O blocking while holding lock
     
     def set_pattern(self, pattern_name):
         """Set the lighting pattern (sync, wave, center, alternate, mirror)."""
@@ -112,7 +112,7 @@ class DmxController:
         if pattern_name in valid_patterns:
             with self.control_lock:
                 self.pattern = pattern_name
-                print(f"Pattern set to: {self.pattern}")
+                # Remove print to avoid I/O blocking while holding lock
     
     def set_light_count(self, count):
         """Set the number of active lights."""
@@ -120,7 +120,7 @@ class DmxController:
         with self.control_lock:
             if self.active_lights != new_count:
                 self.active_lights = new_count
-                print(f"Active lights set to: {self.active_lights}")
+                # Remove print to avoid I/O blocking while holding lock
                 needs_reinit = True
             else:
                 needs_reinit = False
@@ -245,35 +245,51 @@ class DmxController:
             # Apply master brightness control with expanded range
             brightness = min(1.0, intensity * settings['brightness_base'] + beat_boost)
             
-            # Expanded brightness range:
-            # 0.0 = 10% brightness (very dim)
+            # Expanded brightness range with minimum floor:
+            # 0.0 = 5% brightness (very dim but still visible)
             # 0.5 = 100% brightness (normal) 
             # 1.0 = 120% brightness (boosted, clamped to prevent overflow)
             if self.brightness_control < 0.5:
-                # Dim range: 10% to 100%
-                brightness_multiplier = 0.1 + (self.brightness_control * 2 * 0.9)
+                # Dim range: 5% to 100% (increased minimum from 10% to 5% to prevent total darkness)
+                brightness_multiplier = 0.05 + (self.brightness_control * 2 * 0.95)
             else:
                 # Boost range: 100% to 120% (reduced from 150% to prevent overflow)
                 brightness_multiplier = 1.0 + ((self.brightness_control - 0.5) * 2 * 0.2)
             
             brightness *= brightness_multiplier
             
+            # Ensure minimum brightness to prevent complete darkness
+            brightness = max(0.01, brightness)
+            
             # Clamp brightness to prevent DMX overflow
             brightness = min(1.0, brightness)
             
-            # Set DMX values with clamping
+            # Set DMX values with clamping and minimum floor
             if 'dimmer' in channels:
-                data[base_channel + channels['dimmer']] = min(255, int(brightness * 255))
+                # Ensure minimum value of 1 when brightness > 0 to prevent complete darkness
+                dimmer_value = int(brightness * 255)
+                if dimmer_value > 0:
+                    dimmer_value = max(1, dimmer_value)
+                data[base_channel + channels['dimmer']] = min(255, dimmer_value)
                 scale = 1.0
             else:
                 scale = brightness
             
             if 'red' in channels:
-                data[base_channel + channels['red']] = min(255, int(r * scale))
+                red_value = int(r * scale)
+                if red_value > 0:
+                    red_value = max(1, red_value)  # Minimum of 1 when not zero
+                data[base_channel + channels['red']] = min(255, red_value)
             if 'green' in channels:
-                data[base_channel + channels['green']] = min(255, int(g * scale))
+                green_value = int(g * scale)
+                if green_value > 0:
+                    green_value = max(1, green_value)  # Minimum of 1 when not zero
+                data[base_channel + channels['green']] = min(255, green_value)
             if 'blue' in channels:
-                data[base_channel + channels['blue']] = min(255, int(b * scale))
+                blue_value = int(b * scale)
+                if blue_value > 0:
+                    blue_value = max(1, blue_value)  # Minimum of 1 when not zero
+                data[base_channel + channels['blue']] = min(255, blue_value)
             
             # Apply strobe effect on strong beats
             if 'strobe' in channels and self.strobe_level > 0:
