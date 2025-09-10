@@ -183,17 +183,30 @@ configure_ola_sudo() {
     
     # Wait for OLA to start
     print_info "Waiting for OLA to start..."
-    sleep 3
+    sleep 5
     
-    # Configure FTDI plugin for USB DMX devices
-    if [ -f /etc/ola/ola-ftdidmx.conf ]; then
-        print_info "Configuring FTDI DMX plugin..."
-        sed -i 's/enabled = .*/enabled = true/' /etc/ola/ola-ftdidmx.conf
-    fi
+    # CRITICAL: Blacklist ftdi_sio to prevent conflicts
+    print_info "Blacklisting conflicting FTDI serial driver..."
+    cat > /etc/modprobe.d/blacklist-ftdi.conf << 'EOF'
+# Blacklist ftdi_sio to allow OLA direct FTDI access
+blacklist ftdi_sio
+blacklist usbserial
+EOF
     
-    # Disable conflicting plugins
-    if [ -f /etc/ola/ola-usbserial.conf ]; then
-        sed -i 's/enabled = .*/enabled = false/' /etc/ola/ola-usbserial.conf
+    # Try to remove modules if loaded
+    print_info "Removing conflicting kernel modules..."
+    if lsmod | grep -q ftdi_sio; then
+        # Stop OLA temporarily to free the device
+        systemctl stop olad
+        sleep 2
+        
+        # Try to remove the modules
+        modprobe -r ftdi_sio 2>/dev/null || true
+        modprobe -r usbserial 2>/dev/null || true
+        
+        # Restart OLA
+        systemctl start olad
+        sleep 5
     fi
     
     # Add user to dialout group for USB access
@@ -206,15 +219,54 @@ configure_ola_sudo() {
 # FTDI USB DMX devices
 SUBSYSTEM=="usb", ATTR{idVendor}=="0403", ATTR{idProduct}=="6001", MODE="0666", GROUP="dialout"
 SUBSYSTEM=="usb", ATTR{idVendor}=="0403", ATTR{idProduct}=="6015", MODE="0666", GROUP="dialout"
+# Prevent ftdi_sio from claiming the device
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="0403", ATTR{idProduct}=="6001", RUN+="/bin/sh -c 'echo $kernel > /sys/bus/usb/drivers/ftdi_sio/unbind'"
 EOF
     
     udevadm control --reload-rules
     udevadm trigger
     
-    # Restart OLA to apply changes
-    systemctl restart olad
+    # Update initramfs to apply blacklist on boot
+    update-initramfs -u
     
-    print_status "OLA configured"
+    # Configure OLA plugins via command line
+    print_info "Configuring OLA plugins..."
+    
+    # Wait for OLA to be fully ready
+    while ! nc -z localhost 9090 2>/dev/null; do
+        print_info "Waiting for OLA web interface..."
+        sleep 2
+    done
+    
+    # Disable conflicting plugins
+    print_info "Disabling conflicting DMX plugins..."
+    sudo -u $INSTALL_USER ola_plugin_state --plugin-id 5 --state disable 2>/dev/null || true  # Enttec Open DMX
+    sudo -u $INSTALL_USER ola_plugin_state --plugin-id 7 --state disable 2>/dev/null || true  # Serial USB
+    
+    # Enable FTDI plugin
+    print_info "Enabling FTDI USB DMX plugin..."
+    sudo -u $INSTALL_USER ola_plugin_state --plugin-id 13 --state enable 2>/dev/null || true
+    
+    # Restart OLA to apply plugin changes
+    print_info "Restarting OLA with new configuration..."
+    systemctl restart olad
+    sleep 5
+    
+    # Wait for OLA to be ready again
+    while ! nc -z localhost 9090 2>/dev/null; do
+        sleep 1
+    done
+    
+    # Configure universe patching
+    print_info "Configuring DMX Universe 1..."
+    
+    # Get the FTDI device port (usually port 0 of device 13)
+    # Try to patch FTDI device to universe 1
+    sudo -u $INSTALL_USER ola_patch --device 13 --port 0 --universe 1 2>/dev/null || {
+        print_info "Note: Universe patching will complete after reboot when FTDI device is available"
+    }
+    
+    print_status "OLA configured (reboot required for full FTDI functionality)"
 }
 
 # ============================================================================
@@ -430,19 +482,21 @@ echo -e "${GREEN}============================================${NC}"
 echo ""
 echo "Next steps:"
 echo ""
-echo "1. Configure your DMX interface:"
-echo "   Open browser: http://localhost:9090"
-echo "   - Add your DMX USB device"
-echo "   - Patch to Universe 1"
+echo "1. IMPORTANT: Reboot to apply FTDI driver changes:"
+echo "   sudo reboot"
 echo ""
-echo "2. Test the application:"
+echo "2. After reboot, run the DMX configuration helper:"
+echo "   cd $INSTALL_DIR"
+echo "   bash configure_dmx.sh"
+echo ""
+echo "3. Test the application:"
 echo "   cd $INSTALL_DIR"
 echo "   ./venv/bin/python main.py"
 echo ""
-echo "3. The system will auto-start on next boot"
+echo "4. The system will auto-start on subsequent boots"
 echo ""
-echo "4. To start now without rebooting:"
-echo "   $INSTALL_DIR/autostart.sh"
+echo "Alternative: Configure manually via web interface:"
+echo "   http://localhost:9090"
 echo ""
 echo "Controls:"
 echo "  - ESC or Q: Exit application"
