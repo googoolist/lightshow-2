@@ -6,7 +6,7 @@
 ```bash
 cd ~
 git clone [your-repo-url] lightshow-2
-cd lightshow-2/audio_reactive_lighting
+cd lightshow-2/app
 ```
 
 2. **Run the installer:**
@@ -36,7 +36,7 @@ sudo reboot
 
 Test without rebooting:
 ```bash
-cd ~/lightshow-2/audio_reactive_lighting
+cd ~/lightshow-2/app
 ./venv/bin/python main.py
 ```
 
@@ -45,10 +45,10 @@ cd ~/lightshow-2/audio_reactive_lighting
 ### Check logs:
 ```bash
 # Auto-start log
-cat ~/lightshow-2/audio_reactive_lighting/autostart.log
+cat ~/lightshow-2/app/autostart.log
 
 # Application log  
-cat ~/lightshow-2/audio_reactive_lighting/startup.log
+cat ~/lightshow-2/app/startup.log
 ```
 
 ### Check services:
@@ -62,7 +62,7 @@ systemctl status audio_dmx
 
 ### Manual start:
 ```bash
-cd ~/lightshow-2/audio_reactive_lighting
+cd ~/lightshow-2/app
 ./autostart.sh
 ```
 
@@ -84,7 +84,7 @@ Edit `config.py` to:
 
 To remove the application:
 ```bash
-cd ~/lightshow-2/audio_reactive_lighting
+cd ~/lightshow-2/app
 bash uninstall.sh
 ```
 

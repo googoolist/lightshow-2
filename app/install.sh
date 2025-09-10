@@ -390,7 +390,7 @@ test_installation() {
 # Check if we're in the right directory
 if [ ! -f "$INSTALL_DIR/main.py" ]; then
     print_error "main.py not found in current directory!"
-    print_error "Please run this script from the audio_reactive_lighting directory"
+    print_error "Please run this script from the app directory"
     exit 1
 fi
 
