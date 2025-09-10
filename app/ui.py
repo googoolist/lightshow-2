@@ -24,7 +24,7 @@ class AudioReactiveLightingGUI:
         
         # Create main window
         self.root = tk.Tk()
-        self.root.title("Audio-Reactive DMX Controller")
+        self.root.title("Lightshow")
         
         # Set window size
         if config.FULLSCREEN:
