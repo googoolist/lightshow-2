@@ -55,22 +55,77 @@ echo -e "${GREEN}[✓]${NC} OLA is ready"
 # Configure plugins
 echo -e "${YELLOW}[i]${NC} Configuring OLA plugins..."
 
-# Disable conflicting plugins
-ola_plugin_state --plugin-id 5 --state disable 2>/dev/null || true  # Enttec Open DMX
-ola_plugin_state --plugin-id 7 --state disable 2>/dev/null || true  # Serial USB
+# First, stop OLA to ensure clean state
+echo -e "${YELLOW}[i]${NC} Stopping OLA for plugin configuration..."
+sudo systemctl stop olad
+sleep 2
+
+# Disable ALL conflicting plugins via config files
+echo -e "${YELLOW}[i]${NC} Disabling conflicting plugins in config files..."
+sudo sed -i 's/enabled = .*/enabled = false/' /etc/ola/ola-opendmx.conf 2>/dev/null || true
+sudo sed -i 's/enabled = .*/enabled = false/' /etc/ola/ola-usbserial.conf 2>/dev/null || true
+sudo sed -i 's/enabled = .*/enabled = true/' /etc/ola/ola-ftdidmx.conf 2>/dev/null || true
+
+# Start OLA again
+echo -e "${YELLOW}[i]${NC} Starting OLA..."
+sudo systemctl start olad
+sleep 5
+
+# Wait for OLA to be ready
+while ! nc -z localhost 9090 2>/dev/null; do
+    sleep 1
+done
+
+# Now use CLI to ensure plugins are set correctly
+echo -e "${YELLOW}[i]${NC} Setting plugin states via CLI..."
+
+# Disable conflicting plugins (multiple attempts to ensure it takes)
+for i in {1..3}; do
+    ola_plugin_state --plugin-id 5 --state disable 2>/dev/null || true  # Enttec Open DMX
+    sleep 1
+done
+
+for i in {1..3}; do
+    ola_plugin_state --plugin-id 7 --state disable 2>/dev/null || true  # Serial USB
+    sleep 1
+done
 
 # Enable FTDI plugin
-ola_plugin_state --plugin-id 13 --state enable 2>/dev/null || {
-    echo -e "${RED}[✗]${NC} Failed to enable FTDI plugin"
-    echo "Checking plugin status..."
-    ola_plugin_info | grep -A2 "FTDI"
-    exit 1
-}
+for i in {1..3}; do
+    ola_plugin_state --plugin-id 13 --state enable 2>/dev/null && break
+    sleep 1
+done
 
-echo -e "${GREEN}[✓]${NC} FTDI plugin enabled"
+# Check if FTDI is actually enabled
+if ! ola_plugin_info | grep -A1 "Plugin 13" | grep -q "active: 1"; then
+    echo -e "${RED}[✗]${NC} FTDI plugin is not active"
+    
+    # Try one more time with full restart
+    echo -e "${YELLOW}[i]${NC} Attempting force configuration..."
+    sudo systemctl stop olad
+    
+    # Directly edit the preferences file if it exists
+    if [ -f ~/.ola/ola-universe.conf ]; then
+        sed -i '/^5-/d' ~/.ola/ola-universe.conf  # Remove Enttec Open DMX entries
+    fi
+    
+    sudo systemctl start olad
+    sleep 5
+    
+    ola_plugin_state --plugin-id 13 --state enable || {
+        echo -e "${RED}[✗]${NC} Failed to enable FTDI plugin"
+        echo "Manual intervention required. Please check:"
+        echo "  1. USB device is connected"
+        echo "  2. No other process is using the device"
+        echo "  3. ftdi_sio module is not loaded (lsmod | grep ftdi)"
+        exit 1
+    }
+fi
 
-# Restart OLA to apply changes
-echo -e "${YELLOW}[i]${NC} Restarting OLA..."
+echo -e "${GREEN}[✓]${NC} Plugin configuration complete"
+
+# Final restart to ensure everything is applied
+echo -e "${YELLOW}[i]${NC} Final OLA restart..."
 sudo systemctl restart olad
 sleep 5
 
@@ -115,7 +170,7 @@ done
 
 echo ""
 echo -e "${YELLOW}Universe Configuration:${NC}"
-ola_universe_info
+ola_universe_list
 
 echo ""
 echo -e "${GREEN}[✓]${NC} DMX configuration complete!"
