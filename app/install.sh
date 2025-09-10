@@ -62,7 +62,7 @@ install_system_deps() {
     # Check if we need sudo
     if [ "$EUID" -ne 0 ]; then
         print_info "Switching to sudo for system packages..."
-        sudo bash -c "$(declare -f install_system_deps_sudo); install_system_deps_sudo"
+        sudo bash -c "RED='$RED'; GREEN='$GREEN'; YELLOW='$YELLOW'; NC='$NC'; $(declare -f print_status print_error print_info install_system_deps_sudo); install_system_deps_sudo"
     else
         install_system_deps_sudo
     fi
@@ -169,7 +169,7 @@ configure_ola() {
     echo "======================="
     
     if [ "$EUID" -ne 0 ]; then
-        sudo bash -c "$(declare -f configure_ola_sudo); configure_ola_sudo"
+        sudo bash -c "RED='$RED'; GREEN='$GREEN'; YELLOW='$YELLOW'; NC='$NC'; INSTALL_USER='$INSTALL_USER'; $(declare -f print_status print_error print_info configure_ola_sudo); configure_ola_sudo"
     else
         configure_ola_sudo
     fi
@@ -300,7 +300,7 @@ optimize_system() {
     echo "============================"
     
     if [ "$EUID" -ne 0 ]; then
-        sudo bash -c "$(declare -f optimize_system_sudo); optimize_system_sudo"
+        sudo bash -c "RED='$RED'; GREEN='$GREEN'; YELLOW='$YELLOW'; NC='$NC'; INSTALL_USER='$INSTALL_USER'; $(declare -f print_status print_error print_info optimize_system_sudo); optimize_system_sudo"
     else
         optimize_system_sudo
     fi
