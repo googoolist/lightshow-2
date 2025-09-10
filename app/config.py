@@ -206,4 +206,4 @@ COOL_COLOR_PALETTE = [
 GUI_UPDATE_INTERVAL = 200          # GUI refresh interval in milliseconds
 WINDOW_WIDTH = 480                 # Width for small touchscreen
 WINDOW_HEIGHT = 320                # Height for small touchscreen (landscape orientation)
-FULLSCREEN = False                 # Set to True for fullscreen kiosk mode (ESC or Q to exit)
+FULLSCREEN = True                  # Set to True for fullscreen kiosk mode (ESC or Q to exit)
