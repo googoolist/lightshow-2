@@ -19,7 +19,7 @@ Directory Structure
 
 For clarity and maintainability, the project’s code is organized into a few modules, each encapsulating one of the major components. A suggested directory structure is:
 
-audio_reactive_lighting/  
+app/  
 ├── main.py          # Entry point; starts threads and GUI  
 ├── audio.py         # Audio capture and analysis (beat, BPM, intensity)  
 ├── lighting.py      # DMX lighting control and patterns  
@@ -75,7 +75,7 @@ User=pi
 Group=pi
 Environment="DISPLAY=:0.0"
 Environment="XAUTHORITY=/home/pi/.Xauthority"
-ExecStart=/usr/bin/python3 /home/pi/audio_reactive_lighting/main.py
+ExecStart=/usr/bin/python3 /home/pi/lightshow-2/app/main.py
 
 [Install]
 WantedBy=graphical.target
