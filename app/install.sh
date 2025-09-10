@@ -98,7 +98,7 @@ install_system_deps_sudo() {
     # Install additional utilities
     print_info "Installing utilities..."
     apt-get install -y \
-        netcat \
+        netcat-openbsd \
         libftdi1 \
         screen
     
