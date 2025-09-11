@@ -144,19 +144,99 @@ class AudioReactiveLightingGUI:
             0.5, "Subtle", "Intense"  # Midpoint default for balanced reactivity
         )
         
-        # Mood Match toggle (right column)
-        mood_frame = ttk.Frame(right_col)
-        mood_frame.pack(fill=tk.X, pady=(0, 8))
+        # Chaos Level slider (left column)
+        self._create_slider_control(
+            left_col, "Chaos",
+            self._on_chaos_change,
+            0.0, "None", "Wild"
+        )
+        
+        # Echo Length slider (left column) 
+        self._create_slider_control(
+            left_col, "Echo",
+            self._on_echo_length_change,
+            0.0, "Off", "Long"
+        )
+        
+        # Color Theme dropdown (right column)
+        theme_frame = ttk.Frame(right_col)
+        theme_frame.pack(fill=tk.X, pady=(0, 8))
+        
+        ttk.Label(theme_frame, text="Theme:", font=('Arial', 9, 'bold')).pack(anchor=tk.W)
+        
+        self.theme_var = tk.StringVar(value="Default")
+        self.theme_combo = ttk.Combobox(
+            theme_frame,
+            textvariable=self.theme_var,
+            values=["Default", "Sunset", "Ocean", "Fire", "Forest", "Galaxy", "Mono", "Warm", "Cool"],
+            state="readonly",
+            width=12,
+            font=('Arial', 9)
+        )
+        self.theme_combo.pack(fill=tk.X, pady=(2, 0))
+        self.theme_combo.bind("<<ComboboxSelected>>", self._on_theme_change)
+        
+        # Effect Mode dropdown (right column)
+        effect_frame = ttk.Frame(right_col)
+        effect_frame.pack(fill=tk.X, pady=(0, 8))
+        
+        ttk.Label(effect_frame, text="Effect:", font=('Arial', 9, 'bold')).pack(anchor=tk.W)
+        
+        self.effect_var = tk.StringVar(value="None")
+        self.effect_combo = ttk.Combobox(
+            effect_frame,
+            textvariable=self.effect_var,
+            values=["None", "Breathe", "Sparkle", "Chase", "Pulse", "Sweep", "Firefly"],
+            state="readonly",
+            width=12,
+            font=('Arial', 9)
+        )
+        self.effect_combo.pack(fill=tk.X, pady=(2, 0))
+        self.effect_combo.bind("<<ComboboxSelected>>", self._on_effect_change)
+        
+        # Mode toggles (right column) - compact checkboxes
+        modes_frame = ttk.Frame(right_col)
+        modes_frame.pack(fill=tk.X, pady=(0, 8))
+        
+        # Row 1 of checkboxes
+        row1 = ttk.Frame(modes_frame)
+        row1.pack(fill=tk.X)
         
         self.mood_match_var = tk.BooleanVar(value=False)
-        self.mood_match_check = ttk.Checkbutton(
-            mood_frame,
-            text="Mood Match",
+        ttk.Checkbutton(
+            row1,
+            text="Mood",
             variable=self.mood_match_var,
             command=self._on_mood_match_toggle
-        )
-        self.mood_match_check.pack(anchor=tk.W)
-        ttk.Label(mood_frame, text="Cool→Warm by intensity", font=('Arial', 8), foreground='gray').pack(anchor=tk.W, padx=(20, 0))
+        ).pack(side=tk.LEFT)
+        
+        self.frequency_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            row1,
+            text="Freq",
+            variable=self.frequency_var,
+            command=self._on_frequency_toggle
+        ).pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Row 2 of checkboxes
+        row2 = ttk.Frame(modes_frame)
+        row2.pack(fill=tk.X, pady=(4, 0))
+        
+        self.ambient_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            row2,
+            text="Ambient",
+            variable=self.ambient_var,
+            command=self._on_ambient_toggle
+        ).pack(side=tk.LEFT)
+        
+        self.genre_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            row2,
+            text="Auto",
+            variable=self.genre_var,
+            command=self._on_genre_toggle
+        ).pack(side=tk.LEFT, padx=(10, 0))
         
         # Pattern selector (right column)
         pattern_frame = ttk.Frame(right_col)
@@ -353,6 +433,51 @@ class AudioReactiveLightingGUI:
         enabled = self.mood_match_var.get()
         if self.dmx_controller:
             self.dmx_controller.set_mood_match(enabled)
+    
+    def _on_chaos_change(self, value):
+        """Handle chaos slider change."""
+        chaos = float(value)
+        if self.dmx_controller:
+            self.dmx_controller.set_chaos_level(chaos)
+    
+    def _on_echo_length_change(self, value):
+        """Handle echo length slider change."""
+        length = float(value) * 2.0  # Scale 0-1 to 0-2 seconds
+        if self.dmx_controller:
+            self.dmx_controller.set_echo_length(length)
+            self.dmx_controller.set_echo_enabled(length > 0)
+    
+    def _on_theme_change(self, event=None):
+        """Handle color theme selection."""
+        theme = self.theme_var.get().lower()
+        if theme == 'mono':
+            theme = 'monochrome'
+        if self.dmx_controller:
+            self.dmx_controller.set_color_theme(theme)
+    
+    def _on_effect_change(self, event=None):
+        """Handle effect mode selection."""
+        effect = self.effect_var.get().lower()
+        if self.dmx_controller:
+            self.dmx_controller.set_effect_mode(effect)
+    
+    def _on_frequency_toggle(self):
+        """Handle frequency mode toggle."""
+        enabled = self.frequency_var.get()
+        if self.dmx_controller:
+            self.dmx_controller.set_frequency_mode(enabled)
+    
+    def _on_ambient_toggle(self):
+        """Handle ambient mode toggle."""
+        enabled = self.ambient_var.get()
+        if self.dmx_controller:
+            self.dmx_controller.set_ambient_mode(enabled)
+    
+    def _on_genre_toggle(self):
+        """Handle genre auto toggle."""
+        enabled = self.genre_var.get()
+        if self.dmx_controller:
+            self.dmx_controller.set_genre_auto(enabled)
     
     def _on_pattern_change(self, event=None):
         """Handle pattern selection change."""

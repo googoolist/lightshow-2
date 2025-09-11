@@ -31,6 +31,23 @@ class AudioAnalyzer:
         self.current_intensity = 0.0
         self.audio_active = False
         
+        # Frequency analysis
+        self.bass_intensity = 0.0
+        self.mid_intensity = 0.0
+        self.high_intensity = 0.0
+        
+        # Build-up/drop detection
+        self.intensity_trend = deque(maxlen=30)  # Track 30 frames (~0.35s)
+        self.is_building = False
+        self.is_drop = False
+        self.build_start_time = 0
+        
+        # Genre detection
+        self.genre_hints = {
+            'edm': 0, 'rock': 0, 'hiphop': 0, 'jazz': 0, 'ambient': 0
+        }
+        self.detected_genre = 'auto'
+        
         # Audio analysis setup
         self.tempo_detector = aubio.tempo(
             "default",
@@ -94,6 +111,15 @@ class AudioAnalyzer:
                     # Calculate intensity (RMS)
                     rms = np.sqrt(np.mean(buffer**2))
                     self._update_intensity(rms)
+                    
+                    # Frequency analysis
+                    self._analyze_frequencies(buffer)
+                    
+                    # Build-up/drop detection
+                    self._detect_build_drop(self.current_intensity)
+                    
+                    # Genre detection
+                    self._detect_genre(self.current_bpm, self.bass_intensity, beat_detected)
                     
                     # Check for silence/audio presence
                     self._update_audio_presence(rms)
@@ -181,13 +207,107 @@ class AudioAnalyzer:
             # These will be read by other threads
             pass  # State is already updated in instance variables
     
+    def _analyze_frequencies(self, samples):
+        """Analyze frequency content of audio samples."""
+        # Perform FFT
+        fft = np.fft.rfft(samples)
+        freqs = np.fft.rfftfreq(len(samples), 1/config.SAMPLE_RATE)
+        magnitude = np.abs(fft)
+        
+        # Define frequency bands
+        bass_mask = (freqs >= 20) & (freqs <= 250)
+        mid_mask = (freqs > 250) & (freqs <= 4000)
+        high_mask = (freqs > 4000) & (freqs <= 20000)
+        
+        # Calculate intensity for each band
+        if np.any(bass_mask):
+            self.bass_intensity = np.mean(magnitude[bass_mask]) / 1000
+        if np.any(mid_mask):
+            self.mid_intensity = np.mean(magnitude[mid_mask]) / 500
+        if np.any(high_mask):
+            self.high_intensity = np.mean(magnitude[high_mask]) / 250
+            
+        # Normalize to 0-1 range
+        self.bass_intensity = min(1.0, self.bass_intensity)
+        self.mid_intensity = min(1.0, self.mid_intensity)
+        self.high_intensity = min(1.0, self.high_intensity)
+    
+    def _detect_build_drop(self, intensity):
+        """Detect build-ups and drops in the music."""
+        self.intensity_trend.append(intensity)
+        
+        if len(self.intensity_trend) < 10:
+            return
+            
+        # Calculate trend
+        recent = list(self.intensity_trend)[-10:]
+        older = list(self.intensity_trend)[:-10] if len(self.intensity_trend) > 10 else recent
+        
+        recent_avg = np.mean(recent)
+        older_avg = np.mean(older) if older else recent_avg
+        
+        # Detect build-up (gradual increase)
+        if recent_avg > older_avg * 1.2 and not self.is_building:
+            self.is_building = True
+            self.build_start_time = time.time()
+            
+        # Detect drop (sudden increase after build)
+        if self.is_building and intensity > recent_avg * 1.5:
+            self.is_drop = True
+            self.is_building = False
+            # Drop will auto-clear after 1 second
+            
+        # Clear drop flag after 1 second
+        if self.is_drop and time.time() - self.build_start_time > 1.0:
+            self.is_drop = False
+    
+    def _detect_genre(self, bpm, bass_intensity, has_beat):
+        """Simple genre detection based on musical characteristics."""
+        # Reset hints gradually
+        for genre in self.genre_hints:
+            self.genre_hints[genre] *= 0.99
+            
+        # EDM: Fast BPM, strong bass, regular beats
+        if 120 <= bpm <= 140 and bass_intensity > 0.6 and has_beat:
+            self.genre_hints['edm'] += 0.1
+            
+        # Hip-Hop: Medium BPM, very strong bass
+        if 80 <= bpm <= 100 and bass_intensity > 0.7:
+            self.genre_hints['hiphop'] += 0.1
+            
+        # Rock: Medium-fast BPM, balanced frequencies  
+        if 100 <= bpm <= 140 and 0.3 < bass_intensity < 0.7:
+            self.genre_hints['rock'] += 0.1
+            
+        # Jazz: Variable BPM, complex patterns
+        if 60 <= bpm <= 150 and not has_beat:
+            self.genre_hints['jazz'] += 0.05
+            
+        # Ambient: Slow or no clear BPM, low intensity
+        if (bpm < 80 or bpm == 0) and bass_intensity < 0.3:
+            self.genre_hints['ambient'] += 0.1
+            
+        # Determine dominant genre
+        max_score = max(self.genre_hints.values())
+        if max_score > 0.5:
+            for genre, score in self.genre_hints.items():
+                if score == max_score:
+                    self.detected_genre = genre
+                    break
+    
     def get_state(self):
         """Get current audio state (thread-safe)."""
         with self.state_lock:
             return {
                 'bpm': self.current_bpm,
                 'intensity': self.current_intensity,
-                'audio_active': self.audio_active
+                'audio_active': self.audio_active,
+                'bass': self.bass_intensity,
+                'mid': self.mid_intensity,
+                'high': self.high_intensity,
+                'is_building': self.is_building,
+                'is_drop': self.is_drop,
+                'genre': self.detected_genre
             }
     
     def stop(self):

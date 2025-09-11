@@ -202,6 +202,85 @@ COOL_COLOR_PALETTE = [
     (255, 0, 192),    # Pink-purple
 ]
 
+# Color Theme Presets
+COLOR_THEMES = {
+    'default': SMOOTH_COLOR_PALETTE,
+    'sunset': [
+        (128, 0, 128),    # Purple
+        (192, 0, 128),    # Pink-purple
+        (255, 0, 128),    # Pink
+        (255, 64, 128),   # Light pink
+        (255, 128, 64),   # Coral
+        (255, 192, 0),    # Gold
+        (255, 128, 0),    # Orange
+        (255, 64, 0),     # Deep orange
+        (255, 0, 0),      # Red
+        (192, 0, 0),      # Dark red
+    ],
+    'ocean': [
+        (0, 0, 64),       # Deep ocean
+        (0, 0, 128),      # Dark blue
+        (0, 64, 192),     # Ocean blue
+        (0, 128, 255),    # Sky blue
+        (0, 192, 255),    # Light blue
+        (0, 255, 255),    # Cyan
+        (64, 255, 192),   # Seafoam
+        (128, 255, 128),  # Sea green
+        (0, 255, 128),    # Teal
+        (0, 192, 128),    # Dark teal
+    ],
+    'fire': [
+        (64, 0, 0),       # Dark red
+        (128, 0, 0),      # Maroon
+        (192, 0, 0),      # Red
+        (255, 0, 0),      # Bright red
+        (255, 64, 0),     # Red-orange
+        (255, 128, 0),    # Orange
+        (255, 192, 0),    # Gold
+        (255, 255, 0),    # Yellow
+        (255, 255, 128),  # Light yellow
+        (255, 255, 255),  # White hot
+    ],
+    'forest': [
+        (0, 64, 0),       # Dark green
+        (0, 96, 0),       # Forest green
+        (0, 128, 0),      # Green
+        (0, 192, 0),      # Bright green
+        (64, 255, 0),     # Lime
+        (128, 255, 0),    # Yellow-green
+        (192, 255, 0),    # Light green
+        (255, 255, 0),    # Yellow
+        (192, 192, 0),    # Olive
+        (128, 128, 0),    # Dark olive
+    ],
+    'galaxy': [
+        (64, 0, 128),     # Deep purple
+        (96, 0, 192),     # Purple
+        (128, 0, 255),    # Bright purple
+        (64, 64, 255),    # Blue-purple
+        (0, 128, 255),    # Sky blue
+        (0, 192, 255),    # Light blue
+        (0, 255, 255),    # Cyan
+        (128, 255, 255),  # Light cyan
+        (192, 192, 255),  # Pale blue
+        (255, 255, 255),  # White stars
+    ],
+    'monochrome': [
+        (255, 255, 255),  # White
+        (224, 224, 224),  # Light gray
+        (192, 192, 192),  # Gray
+        (160, 160, 160),  # Medium gray
+        (128, 128, 128),  # Dark gray
+        (96, 96, 96),     # Darker gray
+        (64, 64, 64),     # Very dark gray
+        (32, 32, 32),     # Near black
+        (64, 64, 64),     # Very dark gray
+        (128, 128, 128),  # Dark gray
+    ],
+    'warm': WARM_COLOR_PALETTE,
+    'cool': COOL_COLOR_PALETTE
+}
+
 # GUI settings
 GUI_UPDATE_INTERVAL = 200          # GUI refresh interval in milliseconds
 WINDOW_WIDTH = 480                 # Width for small touchscreen

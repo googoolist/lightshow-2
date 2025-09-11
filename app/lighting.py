@@ -51,6 +51,30 @@ class DmxController:
         self.beat_sensitivity = 0.5  # Default midpoint (0.0 = subtle, 1.0 = intense)
         self.mood_match = False  # Default off - intensity-based color temperature
         self.pattern = "sync"  # Default to sync pattern
+        
+        # New controls
+        self.frequency_mode = False  # Frequency-based colors
+        self.color_theme = 'default'  # Color palette theme
+        self.effect_mode = 'none'  # Special effect
+        self.echo_enabled = False  # Trail effect
+        self.echo_length = 0.5  # Trail length (0-2 seconds)
+        self.chaos_level = 0.0  # Randomization (0-1)
+        self.ambient_mode = False  # Chill mode
+        self.genre_auto = False  # Auto genre adaptation
+        
+        # Echo/trail state
+        self.echo_buffer = []  # Previous frames for trail effect
+        self.max_echo_frames = 60  # Max trail frames (2 seconds at 30fps)
+        
+        # Effect state
+        self.effect_phase = 0.0  # Phase for cyclic effects
+        self.sparkle_positions = [0] * config.MAX_LIGHTS
+        self.chase_position = 0
+        
+        # Chaos state
+        self.chaos_colors = [(255,255,255)] * config.MAX_LIGHTS
+        self.chaos_pattern_timer = 0
+        
         self.control_lock = threading.Lock()
         
         # Initialize colors
@@ -63,7 +87,8 @@ class DmxController:
         """Initialize starting colors based on rainbow level."""
         if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
             try:
-                palette = config.SMOOTH_COLOR_PALETTE
+                # Use selected color theme
+                palette = config.COLOR_THEMES.get(self.color_theme, config.SMOOTH_COLOR_PALETTE)
                 
                 if self.rainbow_level < 0.2:
                     # Single color mode - all lights same color
@@ -138,6 +163,77 @@ class DmxController:
         if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
             try:
                 self.mood_match = bool(enabled)
+            finally:
+                self.control_lock.release()
+    
+    def set_frequency_mode(self, enabled):
+        """Enable/disable frequency-based color mapping."""
+        if self.control_lock.acquire(timeout=0.01):
+            try:
+                self.frequency_mode = bool(enabled)
+            finally:
+                self.control_lock.release()
+    
+    def set_color_theme(self, theme_name):
+        """Set the color palette theme."""
+        if theme_name in config.COLOR_THEMES:
+            if self.control_lock.acquire(timeout=0.01):
+                try:
+                    self.color_theme = theme_name
+                    self._initialize_colors()  # Reinit with new palette
+                finally:
+                    self.control_lock.release()
+    
+    def set_effect_mode(self, effect_name):
+        """Set the special effect mode."""
+        valid_effects = ['none', 'breathe', 'sparkle', 'chase', 'pulse', 'sweep', 'firefly']
+        if effect_name in valid_effects:
+            if self.control_lock.acquire(timeout=0.01):
+                try:
+                    self.effect_mode = effect_name
+                    self.effect_phase = 0.0
+                finally:
+                    self.control_lock.release()
+    
+    def set_echo_enabled(self, enabled):
+        """Enable/disable echo trail effect."""
+        if self.control_lock.acquire(timeout=0.01):
+            try:
+                self.echo_enabled = bool(enabled)
+                if not enabled:
+                    self.echo_buffer.clear()
+            finally:
+                self.control_lock.release()
+    
+    def set_echo_length(self, value):
+        """Set echo trail length (0.0 to 2.0 seconds)."""
+        if self.control_lock.acquire(timeout=0.01):
+            try:
+                self.echo_length = max(0.0, min(2.0, value))
+            finally:
+                self.control_lock.release()
+    
+    def set_chaos_level(self, value):
+        """Set chaos/randomization level (0.0 to 1.0)."""
+        if self.control_lock.acquire(timeout=0.01):
+            try:
+                self.chaos_level = max(0.0, min(1.0, value))
+            finally:
+                self.control_lock.release()
+    
+    def set_ambient_mode(self, enabled):
+        """Enable/disable ambient chill mode."""
+        if self.control_lock.acquire(timeout=0.01):
+            try:
+                self.ambient_mode = bool(enabled)
+            finally:
+                self.control_lock.release()
+    
+    def set_genre_auto(self, enabled):
+        """Enable/disable automatic genre adaptation."""
+        if self.control_lock.acquire(timeout=0.01):
+            try:
+                self.genre_auto = bool(enabled)
             finally:
                 self.control_lock.release()
     
@@ -221,6 +317,150 @@ class DmxController:
             print(f"DMX send failed: {status}")
             print(f"Error details: {status.message if hasattr(status, 'message') else 'Unknown error'}")
     
+    def _apply_frequency_colors(self, r, g, b, audio_state):
+        """Map frequency content to colors."""
+        if not self.frequency_mode:
+            return r, g, b
+            
+        # Bass = Red, Mids = Green, Highs = Blue/White
+        bass = audio_state.get('bass', 0)
+        mid = audio_state.get('mid', 0)
+        high = audio_state.get('high', 0)
+        
+        # Blend with existing colors
+        r = int(r * 0.3 + bass * 255 * 0.7)
+        g = int(g * 0.3 + mid * 255 * 0.7)
+        b = int(b * 0.3 + high * 255 * 0.7)
+        
+        return min(255, r), min(255, g), min(255, b)
+    
+    def _apply_special_effect(self, r, g, b, light_index, current_time, intensity):
+        """Apply special effects to colors."""
+        if self.effect_mode == 'none':
+            return r, g, b
+            
+        elif self.effect_mode == 'breathe':
+            # Gentle breathing effect
+            breathe_speed = 0.5 if not self.ambient_mode else 0.2
+            breathe = (math.sin(current_time * breathe_speed) + 1) / 2
+            factor = 0.5 + breathe * 0.5
+            r, g, b = int(r * factor), int(g * factor), int(b * factor)
+            
+        elif self.effect_mode == 'sparkle':
+            # Random white sparkles
+            if random.random() < 0.05 * (1 + intensity):
+                if random.randint(0, self.active_lights - 1) == light_index:
+                    r, g, b = 255, 255, 255
+                    
+        elif self.effect_mode == 'chase':
+            # Single color chases around
+            chase_speed = 2.0 if not self.ambient_mode else 0.5
+            chase_pos = int((current_time * chase_speed) % self.active_lights)
+            if chase_pos == light_index:
+                r, g, b = min(255, r * 2), min(255, g * 2), min(255, b * 2)
+            else:
+                r, g, b = int(r * 0.3), int(g * 0.3), int(b * 0.3)
+                
+        elif self.effect_mode == 'pulse':
+            # All lights pulse together on beat
+            pulse_factor = 1.0 + self.beat_sensitivity * 0.5
+            if self.last_beat_time and (current_time - self.last_beat_time) < 0.1:
+                r, g, b = min(255, int(r * pulse_factor)), min(255, int(g * pulse_factor)), min(255, int(b * pulse_factor))
+                
+        elif self.effect_mode == 'sweep':
+            # Continuous color sweep
+            sweep_speed = 1.0 if not self.ambient_mode else 0.3
+            sweep_phase = (current_time * sweep_speed + light_index * 0.2) % 1.0
+            hue_shift = int(sweep_phase * 360)
+            # Simple HSV to RGB conversion would go here
+            # For now, just rotate through R,G,B
+            if sweep_phase < 0.33:
+                r, g, b = 255, int(sweep_phase * 3 * 255), 0
+            elif sweep_phase < 0.66:
+                r, g, b = int((1 - (sweep_phase - 0.33) * 3) * 255), 255, 0
+            else:
+                r, g, b = 0, int((1 - (sweep_phase - 0.66) * 3) * 255), 255
+                
+        elif self.effect_mode == 'firefly':
+            # Gentle random twinkles
+            if not hasattr(self, 'firefly_states'):
+                self.firefly_states = [0] * config.MAX_LIGHTS
+            
+            # Random chance to start twinkling
+            if random.random() < 0.01:
+                self.firefly_states[light_index] = 1.0
+                
+            # Apply and fade twinkle
+            if self.firefly_states[light_index] > 0:
+                twinkle = self.firefly_states[light_index]
+                r = min(255, int(r + (255 - r) * twinkle))
+                g = min(255, int(g + (255 - g) * twinkle))
+                b = min(255, int(b + (255 - b) * twinkle))
+                self.firefly_states[light_index] *= 0.95  # Fade out
+                
+        return r, g, b
+    
+    def _apply_chaos(self, r, g, b, light_index, beat_occurred):
+        """Apply chaos/randomization."""
+        if self.chaos_level <= 0:
+            return r, g, b
+            
+        # Random color changes
+        if random.random() < self.chaos_level * 0.1:
+            self.chaos_colors[light_index] = (
+                random.randint(0, 255),
+                random.randint(0, 255),
+                random.randint(0, 255)
+            )
+            
+        # Blend with chaos color
+        chaos_r, chaos_g, chaos_b = self.chaos_colors[light_index]
+        blend = self.chaos_level * 0.5
+        r = int(r * (1 - blend) + chaos_r * blend)
+        g = int(g * (1 - blend) + chaos_g * blend)
+        b = int(b * (1 - blend) + chaos_b * blend)
+        
+        # Random pattern switching
+        if beat_occurred and random.random() < self.chaos_level * 0.05:
+            patterns = ["sync", "wave", "center", "alternate", "mirror"]
+            self.pattern = random.choice(patterns)
+            
+        return r, g, b
+    
+    def _apply_genre_adaptation(self, audio_state):
+        """Adapt settings based on detected genre."""
+        if not self.genre_auto:
+            return
+            
+        genre = audio_state.get('genre', 'auto')
+        
+        if genre == 'edm':
+            # Fast, intense, strobing
+            self.smoothness = 0.2
+            self.beat_sensitivity = 0.8
+            self.strobe_level = 0.3
+        elif genre == 'hiphop':
+            # Strong beats, moderate speed
+            self.smoothness = 0.4
+            self.beat_sensitivity = 0.9
+            self.rainbow_level = 0.3
+        elif genre == 'rock':
+            # Warm colors, moderate response
+            self.smoothness = 0.5
+            self.beat_sensitivity = 0.6
+            if self.color_theme == 'default':
+                self.color_theme = 'warm'
+        elif genre == 'jazz':
+            # Smooth, sophisticated
+            self.smoothness = 0.8
+            self.beat_sensitivity = 0.3
+            self.rainbow_level = 0.2
+        elif genre == 'ambient':
+            # Ultra smooth, minimal beat response
+            self.smoothness = 0.95
+            self.beat_sensitivity = 0.1
+            self.ambient_mode = True
+    
     def _compute_dmx_frame(self):
         """Compute the DMX channel values for current frame."""
         data = array.array('B', [0] * config.DMX_CHANNELS)
@@ -230,8 +470,18 @@ class DmxController:
         intensity = audio_state['intensity']
         audio_active = audio_state['audio_active']
         
-        if not audio_active:
+        # Ambient mode - ignore audio activity check
+        if not self.ambient_mode and not audio_active:
             return data
+            
+        # Apply genre adaptation
+        self._apply_genre_adaptation(audio_state)
+        
+        # Handle build-up/drop detection
+        if audio_state.get('is_drop', False):
+            # EXPLOSION! Max everything briefly
+            self.beat_sensitivity = 1.0
+            self.strobe_level = 0.5
         
         # Process beat events
         beat_occurred = False
@@ -256,12 +506,22 @@ class DmxController:
             base_channel = fixture['start_channel'] - 1
             channels = fixture['channels']
             
-            # Apply pattern-based color selection
+            # Multi-layer effects system
+            # Layer 1: Base pattern-based color selection
             r, g, b = self._apply_pattern(i, current_time)
             
-            # Apply mood matching if enabled (cool for low intensity, warm for high)
+            # Layer 2: Frequency-based colors
+            r, g, b = self._apply_frequency_colors(r, g, b, audio_state)
+            
+            # Layer 3: Mood matching (temperature adjustment)
             if self.mood_match:
                 r, g, b = self._apply_mood_adjustment(r, g, b, intensity)
+            
+            # Layer 4: Special effects
+            r, g, b = self._apply_special_effect(r, g, b, i, current_time, intensity)
+            
+            # Layer 5: Chaos randomization
+            r, g, b = self._apply_chaos(r, g, b, i, beat_occurred)
             
             # Calculate brightness with beat response (controlled by beat_sensitivity)
             beat_boost = 0
@@ -504,7 +764,8 @@ class DmxController:
     
     def _select_new_colors(self):
         """Select new target colors based on rainbow level."""
-        palette = config.SMOOTH_COLOR_PALETTE
+        # Use selected color theme
+        palette = config.COLOR_THEMES.get(self.color_theme, config.SMOOTH_COLOR_PALETTE)
         palette_size = len(palette)
         
         if self.rainbow_level < 0.2:
