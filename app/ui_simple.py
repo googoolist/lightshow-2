@@ -1,0 +1,256 @@
+"""
+Simple mode UI with minimal controls for preset programs.
+"""
+
+import tkinter as tk
+from tkinter import ttk
+import config
+
+
+class SimpleUI:
+    """Simple mode UI with program selector and minimal controls."""
+    
+    def __init__(self, parent_frame, audio_analyzer, dmx_controller, stop_event):
+        """
+        Initialize the simple UI.
+        
+        Args:
+            parent_frame: Parent tkinter frame to add UI elements to
+            audio_analyzer: Reference to audio analyzer for state access
+            dmx_controller: Reference to simple DMX controller
+            stop_event: Threading event to signal shutdown
+        """
+        self.parent = parent_frame
+        self.audio_analyzer = audio_analyzer
+        self.dmx_controller = dmx_controller
+        self.stop_event = stop_event
+        
+        # Create UI elements
+        self._create_widgets()
+        
+        # Start periodic updates
+        self._schedule_update()
+        
+    def _create_widgets(self):
+        """Create simple UI widgets."""
+        # Main container with padding
+        main_frame = ttk.Frame(self.parent, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Program selector
+        program_frame = ttk.LabelFrame(main_frame, text="Program", padding="10")
+        program_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.program_var = tk.StringVar(value="Bounce (Same Color)")
+        self.program_combo = ttk.Combobox(
+            program_frame,
+            textvariable=self.program_var,
+            values=[
+                "Bounce (Same Color)",
+                "Bounce (Different Colors)",
+                "Bounce (Discrete)",
+                "Swell (Different Colors)",
+                "Swell (Same Color)",
+                "Disco",
+                "Psych"
+            ],
+            state="readonly",
+            font=('Arial', 11),
+            width=25
+        )
+        self.program_combo.pack(fill=tk.X)
+        self.program_combo.bind("<<ComboboxSelected>>", self._on_program_change)
+        
+        # Controls frame
+        controls_frame = ttk.LabelFrame(main_frame, text="Controls", padding="10")
+        controls_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # BPM Sync control (beat divisions)
+        bpm_frame = ttk.Frame(controls_frame)
+        bpm_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(bpm_frame, text="BPM Sync:", font=('Arial', 10, 'bold')).pack(anchor=tk.W)
+        
+        # Custom scale widget for beat divisions
+        self.bpm_sync_var = tk.IntVar(value=1)  # Default to every beat
+        
+        scale_frame = ttk.Frame(bpm_frame)
+        scale_frame.pack(fill=tk.X, pady=(5, 0))
+        
+        # Labels for divisions
+        labels_frame = ttk.Frame(scale_frame)
+        labels_frame.pack(fill=tk.X)
+        
+        divisions = ["1x", "2x", "4x", "8x", "16x"]
+        for i, label in enumerate(divisions):
+            lbl = ttk.Label(labels_frame, text=label, font=('Arial', 9))
+            lbl.place(relx=i/4, rely=0, anchor='n')
+        
+        # Scale widget
+        self.bpm_scale = ttk.Scale(
+            scale_frame,
+            from_=0,
+            to=4,
+            orient=tk.HORIZONTAL,
+            variable=self.bpm_sync_var,
+            command=self._on_bpm_sync_change
+        )
+        self.bpm_scale.pack(fill=tk.X, pady=(20, 0))
+        
+        # Dimming control
+        dim_frame = ttk.Frame(controls_frame)
+        dim_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(dim_frame, text="Dimming:", font=('Arial', 10, 'bold')).pack(anchor=tk.W)
+        
+        # Dimming slider with percentage display
+        slider_frame = ttk.Frame(dim_frame)
+        slider_frame.pack(fill=tk.X, pady=(5, 0))
+        
+        self.dimming_var = tk.DoubleVar(value=100.0)  # Default 100%
+        
+        ttk.Label(slider_frame, text="0%", font=('Arial', 9)).pack(side=tk.LEFT)
+        
+        self.dimming_scale = ttk.Scale(
+            slider_frame,
+            from_=0.0,
+            to=100.0,
+            orient=tk.HORIZONTAL,
+            variable=self.dimming_var,
+            command=self._on_dimming_change
+        )
+        self.dimming_scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 5))
+        
+        ttk.Label(slider_frame, text="100%", font=('Arial', 9)).pack(side=tk.LEFT)
+        
+        # Dimming percentage label
+        self.dimming_label = ttk.Label(dim_frame, text="Current: 100%", font=('Arial', 9))
+        self.dimming_label.pack(anchor=tk.W, pady=(5, 0))
+        
+        # Cool Colors checkbox
+        self.cool_colors_var = tk.BooleanVar(value=False)
+        self.cool_colors_check = ttk.Checkbutton(
+            controls_frame,
+            text="Cool Colors Only (no reds/oranges)",
+            variable=self.cool_colors_var,
+            command=self._on_cool_colors_toggle
+        )
+        self.cool_colors_check.pack(anchor=tk.W, pady=(5, 0))
+        
+        # Status frame
+        status_frame = ttk.LabelFrame(main_frame, text="Status", padding="10")
+        status_frame.pack(fill=tk.X)
+        
+        # Status display
+        status_text_frame = ttk.Frame(status_frame)
+        status_text_frame.pack(fill=tk.X)
+        
+        # Audio status
+        self.audio_status = ttk.Label(
+            status_text_frame,
+            text="Audio: Waiting...",
+            font=('Arial', 10)
+        )
+        self.audio_status.pack(side=tk.LEFT, padx=(0, 20))
+        
+        # BPM display
+        self.bpm_label = ttk.Label(
+            status_text_frame,
+            text="BPM: --",
+            font=('Arial', 10, 'bold')
+        )
+        self.bpm_label.pack(side=tk.LEFT, padx=(0, 20))
+        
+        # Beat division display
+        self.division_label = ttk.Label(
+            status_text_frame,
+            text="Sync: Every beat",
+            font=('Arial', 10)
+        )
+        self.division_label.pack(side=tk.LEFT)
+        
+        # Info text
+        info_frame = ttk.Frame(main_frame)
+        info_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        info_text = (
+            "Simple Mode - Select a program and adjust controls.\n"
+            "BPM Sync: 1x = every beat, 2x = every 2nd beat, etc.\n"
+            "Dimming: Overall brightness control (0% = lights off)"
+        )
+        
+        self.info_label = ttk.Label(
+            info_frame,
+            text=info_text,
+            font=('Arial', 9),
+            foreground='gray',
+            justify=tk.LEFT
+        )
+        self.info_label.pack(anchor=tk.W)
+        
+    def _on_program_change(self, event=None):
+        """Handle program selection change."""
+        program = self.program_var.get()
+        if self.dmx_controller:
+            self.dmx_controller.set_program(program)
+            
+    def _on_bpm_sync_change(self, value):
+        """Handle BPM sync slider change."""
+        # Convert scale position to beat division
+        divisions = [1, 2, 4, 8, 16]
+        pos = int(float(value))
+        division = divisions[pos]
+        
+        if self.dmx_controller:
+            self.dmx_controller.set_bpm_division(division)
+            
+        # Update label
+        if division == 1:
+            text = "Sync: Every beat"
+        else:
+            text = f"Sync: Every {division} beats"
+        self.division_label.config(text=text)
+        
+    def _on_dimming_change(self, value):
+        """Handle dimming slider change."""
+        percent = float(value)
+        self.dimming_label.config(text=f"Current: {int(percent)}%")
+        
+        if self.dmx_controller:
+            # Convert percentage to 0.0-1.0
+            self.dmx_controller.set_dimming(percent / 100.0)
+            
+    def _on_cool_colors_toggle(self):
+        """Handle cool colors checkbox toggle."""
+        enabled = self.cool_colors_var.get()
+        if self.dmx_controller:
+            self.dmx_controller.set_cool_colors(enabled)
+            
+    def _schedule_update(self):
+        """Schedule periodic display updates."""
+        self._update_display()
+        if not self.stop_event.is_set():
+            self.parent.after(500, self._schedule_update)  # Update every 500ms
+            
+    def _update_display(self):
+        """Update status display with current audio state."""
+        if self.audio_analyzer:
+            state = self.audio_analyzer.get_state()
+            
+            # Audio status
+            if state['audio_active']:
+                self.audio_status.config(text="Audio: Playing", foreground='green')
+            else:
+                self.audio_status.config(text="Audio: No Signal", foreground='gray')
+                
+            # BPM
+            bpm = state['bpm']
+            if bpm > 0:
+                self.bpm_label.config(text=f"BPM: {int(bpm)}")
+            else:
+                self.bpm_label.config(text="BPM: --")
+                
+    def destroy(self):
+        """Clean up the UI."""
+        # Nothing special needed for simple UI
+        pass

@@ -17,8 +17,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import config
 from audio import AudioAnalyzer
-from lighting import DmxController
-from ui import AudioReactiveLightingGUI
+from lighting_simple import SimpleDmxController
+from lighting_advanced import DmxController as AdvancedDmxController
+from ui import MainUI
 
 
 class AudioReactiveLightingSystem:
@@ -38,7 +39,8 @@ class AudioReactiveLightingSystem:
         
         # System components
         self.audio_analyzer = None
-        self.dmx_controller = None
+        self.simple_controller = None
+        self.advanced_controller = None
         self.gui = None
         
         # Setup signal handlers for graceful shutdown
@@ -66,22 +68,33 @@ class AudioReactiveLightingSystem:
             self.audio_analyzer.start()
             print("Audio analyzer started")
             
-            # Initialize DMX controller
-            print("Initializing DMX controller...")
-            self.dmx_controller = DmxController(
+            # Initialize both DMX controllers (only one will be active at a time)
+            print("Initializing Simple DMX controller...")
+            self.simple_controller = SimpleDmxController(
                 self.audio_analyzer,
                 self.beat_queue,
                 self.stop_event
             )
-            self.dmx_controller.start()
-            print("DMX controller started")
+            # Simple controller starts by default
+            self.simple_controller.start()
+            print("Simple DMX controller started")
+            
+            print("Initializing Advanced DMX controller...")
+            self.advanced_controller = AdvancedDmxController(
+                self.audio_analyzer,
+                self.beat_queue,
+                self.stop_event
+            )
+            # Advanced controller doesn't start yet
+            print("Advanced DMX controller initialized")
             
             if not self.headless:
                 # Initialize and run GUI (blocks until window closed)
                 print("Starting GUI...")
-                self.gui = AudioReactiveLightingGUI(
+                self.gui = MainUI(
                     self.audio_analyzer,
-                    self.dmx_controller,
+                    self.simple_controller,
+                    self.advanced_controller,
                     self.stop_event
                 )
                 self.gui.run()
@@ -114,9 +127,13 @@ class AudioReactiveLightingSystem:
         self.stop_event.set()
         
         # Stop components in reverse order
-        if self.dmx_controller:
-            print("Stopping DMX controller...")
-            self.dmx_controller.stop()
+        if self.simple_controller:
+            print("Stopping Simple DMX controller...")
+            self.simple_controller.stop()
+            
+        if self.advanced_controller:
+            print("Stopping Advanced DMX controller...")
+            self.advanced_controller.stop()
         
         if self.audio_analyzer:
             print("Stopping audio analyzer...")
