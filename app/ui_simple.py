@@ -106,7 +106,12 @@ class SimpleUI:
                 "Center Burst",
                 "VU Meter",
                 "Ripple",
-                "Alternating"
+                "Alternating",
+                "Kaleidoscope",
+                "Spiral",
+                "Breathing",
+                "Interference",
+                "Color Ripples"
             ],
             state="readonly",
             font=('Arial', 9),
