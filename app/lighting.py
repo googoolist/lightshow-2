@@ -42,15 +42,16 @@ class DmxController:
         self.current_colors = [(0, 0, 0)] * config.MAX_LIGHTS  # Current colors for smooth fading
         self.color_fade_progress = [0.0] * config.MAX_LIGHTS  # Fade progress for each PAR
         self.last_color_change = 0
+        self.color_phases = [i * 0.2 for i in range(config.MAX_LIGHTS)]  # Phase offset for smooth waves
         
         # Control parameters - midpoint defaults for balanced effect
-        self.smoothness = 0.5  # Default midpoint (0.0 = fast, 1.0 = very smooth)
-        self.rainbow_level = 0.5  # Default midpoint (0.0 = single color, 1.0 = full rainbow)
+        self.smoothness = 0.8  # Default to smoother transitions
+        self.rainbow_level = 0.3  # Less aggressive color changing
         self.brightness_control = 0.5  # Default midpoint (0.0 = dim, 1.0 = full)
         self.strobe_level = 0.0  # Default off (0.0 = off, 1.0 = max)
-        self.beat_sensitivity = 0.5  # Default midpoint (0.0 = subtle, 1.0 = intense)
+        self.beat_sensitivity = 0.3  # Less aggressive beat response
         self.mood_match = False  # Default off - intensity-based color temperature
-        self.pattern = "sync"  # Default to sync pattern
+        self.pattern = "wave"  # Default to wave pattern for motion
         
         # New controls
         self.frequency_mode = False  # Frequency-based colors
@@ -606,15 +607,18 @@ class DmxController:
                     blue_value = max(1, blue_value)  # Minimum of 1 when not zero
                 data[base_channel + channels['blue']] = min(255, blue_value)
             
-            # Apply strobe effect on strong beats (enhanced by beat sensitivity)
-            if 'strobe' in channels and self.strobe_level > 0:
-                # Lower threshold with higher beat sensitivity for more frequent strobes
-                strobe_threshold = 1.0 - (self.strobe_level * 0.5) - (self.beat_sensitivity * 0.3)
-                if beat_occurred and intensity > max(0.2, strobe_threshold):
-                    # Strobe intensity based on slider and beat sensitivity
-                    strobe_value = min(255, int(self.strobe_level * 255 * (0.5 + self.beat_sensitivity * 0.5)))
-                    data[base_channel + channels['strobe']] = strobe_value
+            # Apply strobe ONLY when explicitly set via strobe control
+            if 'strobe' in channels:
+                if self.strobe_level > 0.1:  # Only strobe when slider is actively set
+                    # Strobe frequency based on strobe level
+                    strobe_rate = self.strobe_level * 10  # 0 to 10 Hz
+                    if (current_time * strobe_rate) % 1.0 < 0.5:
+                        strobe_value = min(255, int(self.strobe_level * 255))
+                        data[base_channel + channels['strobe']] = strobe_value
+                    else:
+                        data[base_channel + channels['strobe']] = 0
                 else:
+                    # No strobe at all when slider is at/near zero
                     data[base_channel + channels['strobe']] = 0
         
         return data
@@ -654,10 +658,22 @@ class DmxController:
             
         elif self.pattern == "wave":
             # Colors flow from left to right
-            wave_speed = 0.5 + (1.0 - self.smoothness) * 3.5  # 0.5 to 4.0 speed range
-            wave_offset = int((current_time * wave_speed) % self.active_lights)
-            color_idx = (light_index + wave_offset) % self.active_lights
-            return self.current_colors[color_idx]
+            wave_speed = 0.2 + (1.0 - self.smoothness) * 1.0  # Much slower: 0.2 to 1.2 speed
+            phase = (current_time * wave_speed + self.color_phases[light_index]) * 2 * 3.14159
+            
+            # Use sine wave for smooth transitions
+            wave_factor = (math.sin(phase) + 1.0) / 2.0  # 0 to 1
+            
+            # Blend between current and next color in palette
+            base_color = self.current_colors[light_index]
+            next_idx = (light_index + 1) % self.active_lights
+            next_color = self.current_colors[next_idx]
+            
+            r = int(base_color[0] * (1 - wave_factor) + next_color[0] * wave_factor)
+            g = int(base_color[1] * (1 - wave_factor) + next_color[1] * wave_factor)
+            b = int(base_color[2] * (1 - wave_factor) + next_color[2] * wave_factor)
+            
+            return (r, g, b)
             
         elif self.pattern == "center":
             # Center light(s) lead, outer lights follow
@@ -720,35 +736,23 @@ class DmxController:
             try:
                 current_time = time.time()
                 
-                # Determine color change frequency with expanded smoothness range
+                # Much slower color transitions for smoother experience
                 if self.rainbow_level < 0.2:
-                    # Single color mode - change slowly
-                    if self.smoothness < 0.5:
-                        change_interval = 4.0 + self.smoothness * 8.0  # 4-8 seconds (fast)
-                    else:
-                        change_interval = 8.0 + (self.smoothness - 0.5) * 24.0  # 8-20 seconds (slow)
+                    # Single color mode - very slow changes
+                    change_interval = 10.0 + self.smoothness * 20.0  # 10-30 seconds
                     change_on_beat = False
                 elif self.rainbow_level < 0.5:
-                    # Moderate diversity - change occasionally
-                    if self.smoothness < 0.5:
-                        change_interval = 2.0 + self.smoothness * 4.0  # 2-4 seconds (fast)
-                    else:
-                        change_interval = 4.0 + (self.smoothness - 0.5) * 8.0  # 4-8 seconds (slow)
-                    change_on_beat = beat_occurred and intensity > 0.6
+                    # Moderate diversity - gradual changes
+                    change_interval = 5.0 + self.smoothness * 10.0  # 5-15 seconds
+                    change_on_beat = beat_occurred and intensity > 0.7 and self.beat_sensitivity > 0.5
                 elif self.rainbow_level < 0.8:
-                    # High diversity - change frequently
-                    if self.smoothness < 0.5:
-                        change_interval = 1.0 + self.smoothness * 2.0  # 1-2 seconds (fast)
-                    else:
-                        change_interval = 2.0 + (self.smoothness - 0.5) * 4.0  # 2-4 seconds (slow)
-                    change_on_beat = beat_occurred and intensity > 0.4
+                    # High diversity - steady changes
+                    change_interval = 3.0 + self.smoothness * 5.0  # 3-8 seconds
+                    change_on_beat = beat_occurred and intensity > 0.5 and self.beat_sensitivity > 0.3
                 else:
-                    # Full rainbow - change on every beat or quickly
-                    if self.smoothness < 0.5:
-                        change_interval = 0.5 + self.smoothness * 1.0  # 0.5-1 seconds (fast)
-                    else:
-                        change_interval = 1.0 + (self.smoothness - 0.5) * 2.0  # 1-2 seconds (slow)
-                    change_on_beat = beat_occurred
+                    # Full rainbow - regular changes
+                    change_interval = 2.0 + self.smoothness * 3.0  # 2-5 seconds
+                    change_on_beat = beat_occurred and self.beat_sensitivity > 0.2
                 
                 # Check if it's time to change colors
                 time_to_change = current_time - self.last_color_change > change_interval

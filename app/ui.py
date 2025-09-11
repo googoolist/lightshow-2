@@ -133,18 +133,18 @@ class AudioReactiveLightingGUI:
         right_col = ttk.Frame(controls_container)
         right_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(3, 0))
         
-        # Speed control (left column)
+        # Speed control (left column) - default to smoother
         self._create_slider_control(
             left_col, "Speed", 
             self._on_smoothness_change,
-            0.5, "Slow", "Fast"
+            0.2, "Slow", "Fast"  # 0.2 = 80% smoothness (inverted)
         )
         
-        # Rainbow control (left column)
+        # Rainbow control (left column) - less aggressive
         self._create_slider_control(
             left_col, "Rainbow",
             self._on_rainbow_change,
-            0.5, "Single", "Full"
+            0.3, "Single", "Full"  # 0.3 = 30% rainbow
         )
         
         # Brightness control (left column)
@@ -161,11 +161,11 @@ class AudioReactiveLightingGUI:
             0.0, "Off", "Max"
         )
         
-        # Beat Sensitivity control (right column)
+        # Beat Sensitivity control (right column) - less aggressive
         self._create_slider_control(
             right_col, "Beat Sens",
             self._on_beat_sensitivity_change,
-            0.5, "Subtle", "Intense"
+            0.3, "Subtle", "Intense"  # 0.3 = 30% sensitivity
         )
         
         # Pattern selector
@@ -174,7 +174,7 @@ class AudioReactiveLightingGUI:
         
         ttk.Label(pattern_frame, text="Pattern:", font=('Arial', 9, 'bold')).pack(anchor=tk.W)
         
-        self.pattern_var = tk.StringVar(value="Sync")
+        self.pattern_var = tk.StringVar(value="Wave")  # Default to wave for motion
         self.pattern_combo = ttk.Combobox(
             pattern_frame,
             textvariable=self.pattern_var,
