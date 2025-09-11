@@ -58,6 +58,11 @@ class SimpleDmxController(BaseDmxController):
         "VU Meter",
         "Ripple",
         "Alternating",
+        "Kaleidoscope",
+        "Spiral",
+        "Breathing",
+        "Interference",
+        "Color Ripples",
     ]
     
     def __init__(self, audio_analyzer, beat_queue, stop_event):
@@ -82,6 +87,17 @@ class SimpleDmxController(BaseDmxController):
         self.disco_states = []  # Random states for each light
         self.psych_phase = 0.0
         
+        # Enhanced Psych mode state
+        self.psych_pattern_type = 0  # Current pattern (0-4)
+        self.psych_symmetry_mode = 0  # Mirror, radial, bilateral
+        self.psych_color_pairs = []  # Complementary color pairs
+        self.psych_phase_offsets = []  # Per-light phase offsets
+        self.psych_flicker_states = []  # Flicker intensity per light
+        self.psych_spiral_angle = 0.0  # Rotation angle
+        self.psych_morph_progress = 0.0  # Color morph progress
+        self.psych_pattern_timer = 0  # Time until next pattern change
+        self.psych_beat_count = 0  # Beat counter for pattern changes
+        
         # New program states
         self.pulse_color_index = 0
         self.spectrum_colors = []  # Colors for spectrum display
@@ -95,6 +111,15 @@ class SimpleDmxController(BaseDmxController):
         self.ripple_positions = []  # Multiple wave positions
         self.alternating_state = False
         self.alternating_color_index = 0
+        
+        # New pattern generator states
+        self.kaleidoscope_angle = 0.0
+        self.kaleidoscope_color_index = 0
+        self.spiral_position = 0.0
+        self.spiral_color_phase = 0.0
+        self.breathing_phases = []
+        self.interference_phases = []
+        self.color_ripple_centers = []  # List of active ripples
         
         # Beat tracking for divisions
         self.beat_counter = 0
@@ -119,6 +144,13 @@ class SimpleDmxController(BaseDmxController):
         # Initialize spectrum colors
         palette = self._get_color_palette()
         self.spectrum_colors = [palette[i % len(palette)] for i in range(config.MAX_LIGHTS)]
+        
+        # Initialize psychedelic states
+        self._init_psych_states()
+        
+        # Initialize new pattern states
+        self.breathing_phases = [i * 0.3 for i in range(config.MAX_LIGHTS)]
+        self.interference_phases = [(i * 0.7, i * 0.5) for i in range(config.MAX_LIGHTS)]
         
         # Initialize ripple wave positions
         self.ripple_positions = [i * 0.2 for i in range(3)]  # 3 overlapping waves
@@ -146,9 +178,31 @@ class SimpleDmxController(BaseDmxController):
             self.cool_colors_only = enabled
             self._init_light_states()  # Reset colors
             
+    def _init_psych_states(self):
+        """Initialize psychedelic mode states."""
+        # Generate complementary color pairs
+        self.psych_color_pairs = [
+            ((255, 0, 0), (0, 255, 255)),      # Red/Cyan
+            ((0, 0, 255), (255, 128, 0)),      # Blue/Orange
+            ((0, 255, 0), (255, 0, 255)),      # Green/Magenta
+            ((255, 255, 0), (128, 0, 255)),    # Yellow/Purple
+            ((255, 0, 128), (0, 255, 128)),    # Pink/Teal
+        ]
+        
+        # Random phase offsets for each light
+        self.psych_phase_offsets = [random.random() * 2 * math.pi for _ in range(config.MAX_LIGHTS)]
+        
+        # Flicker states
+        self.psych_flicker_states = [random.random() * 0.15 for _ in range(config.MAX_LIGHTS)]
+    
     def _get_color_palette(self):
         """Get the appropriate color palette."""
         return self.COLORS_COOL if self.cool_colors_only else self.COLORS_FULL
+    
+    def _get_complementary_color(self, color):
+        """Get complementary color using color wheel math."""
+        r, g, b = color
+        return (255 - r, 255 - g, 255 - b)
         
     def _should_trigger_effect(self):
         """Check if effect should trigger based on beat division."""
@@ -197,7 +251,7 @@ class SimpleDmxController(BaseDmxController):
         elif self.program == "Disco":
             self._program_disco(data, intensity)
         elif self.program == "Psych":
-            self._program_psych(data, intensity)
+            self._program_psych(data, audio_state)
         elif self.program == "Pulse":
             self._program_pulse(data, audio_state)
         elif self.program == "Spectrum":
@@ -214,6 +268,16 @@ class SimpleDmxController(BaseDmxController):
             self._program_ripple(data, intensity)
         elif self.program == "Alternating":
             self._program_alternating(data, intensity)
+        elif self.program == "Kaleidoscope":
+            self._program_kaleidoscope(data, audio_state)
+        elif self.program == "Spiral":
+            self._program_spiral(data, audio_state)
+        elif self.program == "Breathing":
+            self._program_breathing(data, audio_state)
+        elif self.program == "Interference":
+            self._program_interference(data, audio_state)
+        elif self.program == "Color Ripples":
+            self._program_color_ripples(data, audio_state)
             
         return data
         
@@ -427,44 +491,98 @@ class SimpleDmxController(BaseDmxController):
             brightness = state['brightness'] * self.dimming
             self._set_light_color(data, i, r, g, b, brightness)
             
-    def _program_psych(self, data, intensity):
-        """Psychedelic smooth effects with creative patterns."""
-        palette = self._get_color_palette()
+    def _program_psych(self, data, audio_state):
+        """Enhanced psychedelic kaleidoscopic effects."""
+        intensity = audio_state['intensity']
+        bass = audio_state.get('bass', 0)
+        mid = audio_state.get('mid', 0) 
+        high = audio_state.get('high', 0)
         
-        # Update phase based on beat division
-        phase_speed = 0.3 / max(1, self.bpm_division)
+        # Update pattern timer and switch patterns
+        if self.beat_occurred:
+            self.psych_beat_count += 1
+            if self.psych_beat_count >= 16:  # Change pattern every 16 beats
+                self.psych_pattern_type = (self.psych_pattern_type + 1) % 5
+                self.psych_symmetry_mode = random.randint(0, 2)
+                self.psych_beat_count = 0
+                # Reinitialize some states for variety
+                self._init_psych_states()
+        
+        # Update phase and morphing
+        phase_speed = (0.5 + bass * 0.5) / max(1, self.bpm_division)
         self.psych_phase += phase_speed * (1.0 / config.UPDATE_FPS)
+        self.psych_spiral_angle += (mid * 0.1 + 0.02) * (1.0 / config.UPDATE_FPS)
+        self.psych_morph_progress += (high * 0.05 + 0.01) * (1.0 / config.UPDATE_FPS)
         
-        # Create multiple overlapping waves for psychedelic effect
+        # Get current color pair
+        pair_index = int(self.psych_morph_progress) % len(self.psych_color_pairs)
+        next_pair_index = (pair_index + 1) % len(self.psych_color_pairs)
+        morph_t = self.psych_morph_progress - int(self.psych_morph_progress)
+        
+        color_pair_1 = self.psych_color_pairs[pair_index]
+        color_pair_2 = self.psych_color_pairs[next_pair_index]
+        
+        # Apply different patterns based on current type
         for i in range(self.active_lights):
-            # Each light has different phase offset for flowing effect
-            light_phase = self.psych_phase + (i * 0.3)
+            # Calculate base pattern
+            if self.psych_pattern_type == 0:  # Flowing waves
+                phase = self.psych_phase + self.psych_phase_offsets[i]
+                wave1 = (math.sin(phase * 2 * math.pi) + 1.0) / 2.0
+                wave2 = (math.sin(phase * 3 * math.pi + self.psych_spiral_angle) + 1.0) / 2.0
+                pattern_value = wave1 * 0.6 + wave2 * 0.4
+                
+            elif self.psych_pattern_type == 1:  # Spiral
+                angle = (i / self.active_lights) * 2 * math.pi + self.psych_spiral_angle
+                pattern_value = (math.sin(angle * 2) + 1.0) / 2.0
+                
+            elif self.psych_pattern_type == 2:  # Breathing
+                phase = self.psych_phase * 2 + self.psych_phase_offsets[i]
+                pattern_value = (math.sin(phase) + 1.0) / 2.0
+                
+            elif self.psych_pattern_type == 3:  # Interference
+                phase1 = self.psych_phase + i * 0.5
+                phase2 = self.psych_phase * 1.5 - i * 0.3
+                wave1 = math.sin(phase1 * 2 * math.pi)
+                wave2 = math.sin(phase2 * 2 * math.pi)
+                pattern_value = (wave1 * wave2 + 1.0) / 2.0
+                
+            else:  # Kaleidoscope
+                # Mirror pattern
+                mirror_i = i if i < self.active_lights // 2 else self.active_lights - 1 - i
+                phase = self.psych_phase + mirror_i * 0.4
+                pattern_value = (math.sin(phase * 2 * math.pi) + 1.0) / 2.0
             
-            # Multiple sine waves at different frequencies
-            wave1 = (math.sin(light_phase * 2 * math.pi) + 1.0) / 2.0
-            wave2 = (math.sin(light_phase * 3 * math.pi) + 1.0) / 2.0
-            wave3 = (math.sin(light_phase * 1.5 * math.pi) + 1.0) / 2.0
+            # Select colors based on pattern value
+            if pattern_value < 0.5:
+                # Use first color from pair
+                base_color = color_pair_1[0]
+                t = pattern_value * 2  # Remap to 0-1
+            else:
+                # Use second color from pair
+                base_color = color_pair_1[1]
+                t = (pattern_value - 0.5) * 2  # Remap to 0-1
             
-            # Blend waves for complex pattern
-            blend = (wave1 * 0.5 + wave2 * 0.3 + wave3 * 0.2)
+            # Morph between color pairs
+            target_color = color_pair_2[0] if pattern_value < 0.5 else color_pair_2[1]
             
-            # Color morphing based on waves
-            color_index = int(blend * len(palette)) % len(palette)
-            next_index = (color_index + 1) % len(palette)
+            r = int(base_color[0] * (1 - morph_t) + target_color[0] * morph_t)
+            g = int(base_color[1] * (1 - morph_t) + target_color[1] * morph_t)
+            b = int(base_color[2] * (1 - morph_t) + target_color[2] * morph_t)
             
-            # Interpolate between colors
-            color1 = palette[color_index]
-            color2 = palette[next_index]
+            # Apply frequency-based color modulation
+            r = min(255, int(r * (1 + bass * 0.3)))
+            g = min(255, int(g * (1 + mid * 0.3)))
+            b = min(255, int(b * (1 + high * 0.3)))
             
-            # Smooth color blending
-            t = blend - int(blend)
-            r = int(color1[0] * (1 - t) + color2[0] * t)
-            g = int(color1[1] * (1 - t) + color2[1] * t)
-            b = int(color1[2] * (1 - t) + color2[2] * t)
-            
-            # Brightness varies smoothly
-            brightness = 0.3 + 0.7 * wave1  # Never too dark
+            # Calculate brightness with flicker
+            base_brightness = 0.3 + pattern_value * 0.5
+            flicker = 1.0 - self.psych_flicker_states[i] * (0.5 + high * 0.5)
+            brightness = base_brightness * flicker * (0.7 + intensity * 0.3)
             brightness *= self.dimming
+            
+            # Update flicker states
+            if random.random() < 0.1:  # 10% chance to change flicker
+                self.psych_flicker_states[i] = random.random() * 0.15
             
             self._set_light_color(data, i, r, g, b, brightness)
             
@@ -730,4 +848,221 @@ class SimpleDmxController(BaseDmxController):
             brightness *= (0.5 + intensity * 0.5)
             brightness *= self.dimming
             
+            self._set_light_color(data, i, r, g, b, brightness)
+            
+    def _program_kaleidoscope(self, data, audio_state):
+        """Kaleidoscope mirror pattern with symmetry."""
+        intensity = audio_state['intensity']
+        bass = audio_state.get('bass', 0)
+        
+        palette = self._get_color_palette()
+        
+        # Rotate angle based on bass
+        rotation_speed = 0.05 + bass * 0.1
+        self.kaleidoscope_angle += rotation_speed / max(1, self.bpm_division)
+        
+        # Change color on beat
+        if self._should_trigger_effect():
+            self.kaleidoscope_color_index = (self.kaleidoscope_color_index + 1) % len(palette)
+        
+        center = self.active_lights / 2.0
+        
+        for i in range(self.active_lights):
+            # Create mirror effect from center
+            distance_from_center = abs(i - center) / center
+            
+            # Apply rotating wave pattern
+            wave_phase = self.kaleidoscope_angle + distance_from_center * math.pi
+            wave_value = (math.sin(wave_phase * 2) + 1.0) / 2.0
+            
+            # Interpolate between two colors
+            color1 = palette[self.kaleidoscope_color_index]
+            color2 = palette[(self.kaleidoscope_color_index + 1) % len(palette)]
+            
+            r = int(color1[0] * (1 - wave_value) + color2[0] * wave_value)
+            g = int(color1[1] * (1 - wave_value) + color2[1] * wave_value)
+            b = int(color1[2] * (1 - wave_value) + color2[2] * wave_value)
+            
+            # Brightness based on distance and intensity
+            brightness = (1.0 - distance_from_center * 0.3) * (0.5 + intensity * 0.5)
+            brightness *= self.dimming
+            
+            self._set_light_color(data, i, r, g, b, brightness)
+            
+    def _program_spiral(self, data, audio_state):
+        """Continuous spiral flow pattern."""
+        intensity = audio_state['intensity']
+        mid = audio_state.get('mid', 0)
+        
+        palette = self._get_color_palette()
+        
+        # Spiral movement speed based on mids
+        spiral_speed = 0.1 + mid * 0.2
+        self.spiral_position += spiral_speed / max(1, self.bpm_division)
+        
+        # Color phase shifts slower
+        self.spiral_color_phase += 0.02
+        
+        for i in range(self.active_lights):
+            # Calculate spiral position for this light
+            spiral_offset = (i / self.active_lights) * 2 * math.pi
+            phase = self.spiral_position * 2 * math.pi + spiral_offset
+            
+            # Create spiral wave
+            wave = (math.sin(phase) + 1.0) / 2.0
+            
+            # Color selection with smooth transition
+            color_pos = (self.spiral_color_phase + wave) % 1.0
+            color_index = int(color_pos * len(palette))
+            next_index = (color_index + 1) % len(palette)
+            
+            t = (color_pos * len(palette)) - color_index
+            color1 = palette[color_index]
+            color2 = palette[next_index]
+            
+            r = int(color1[0] * (1 - t) + color2[0] * t)
+            g = int(color1[1] * (1 - t) + color2[1] * t)
+            b = int(color1[2] * (1 - t) + color2[2] * t)
+            
+            brightness = 0.3 + wave * 0.5 + intensity * 0.2
+            brightness *= self.dimming
+            
+            self._set_light_color(data, i, r, g, b, brightness)
+            
+    def _program_breathing(self, data, audio_state):
+        """Organic breathing pattern with phase offsets."""
+        intensity = audio_state['intensity']
+        bass = audio_state.get('bass', 0)
+        
+        palette = self._get_color_palette()
+        
+        # Breathing rate influenced by bass
+        breath_rate = 0.03 + bass * 0.02
+        
+        for i in range(self.active_lights):
+            # Update individual breathing phases
+            self.breathing_phases[i] += breath_rate / max(1, self.bpm_division)
+            
+            # Calculate breath value (smooth sine wave)
+            breath = (math.sin(self.breathing_phases[i]) + 1.0) / 2.0
+            
+            # Color shifts slowly through palette
+            color_offset = (self.breathing_phases[i] * 0.1) % 1.0
+            color_index = int(color_offset * len(palette))
+            
+            r, g, b = palette[color_index]
+            
+            # Apply complementary color on alternate lights
+            if i % 2 == 1:
+                r, g, b = self._get_complementary_color((r, g, b))
+            
+            # Breathing brightness
+            brightness = 0.2 + breath * 0.6 + intensity * 0.2
+            brightness *= self.dimming
+            
+            self._set_light_color(data, i, r, g, b, brightness)
+            
+    def _program_interference(self, data, audio_state):
+        """Wave interference patterns creating moiré effects."""
+        intensity = audio_state['intensity']
+        high = audio_state.get('high', 0)
+        
+        palette = self._get_color_palette()
+        
+        # Wave speeds influenced by highs
+        wave1_speed = 0.05 + high * 0.05
+        wave2_speed = 0.03 + high * 0.07
+        
+        for i in range(self.active_lights):
+            # Update dual wave phases
+            phase1, phase2 = self.interference_phases[i]
+            phase1 += wave1_speed / max(1, self.bpm_division)
+            phase2 += wave2_speed / max(1, self.bpm_division)
+            self.interference_phases[i] = (phase1, phase2)
+            
+            # Calculate interference pattern
+            wave1 = math.sin(phase1 * 2 * math.pi)
+            wave2 = math.sin(phase2 * 3 * math.pi)
+            
+            # Interference creates complex patterns
+            interference = (wave1 * wave2 + 1.0) / 2.0
+            
+            # Color based on interference value
+            if interference < 0.33:
+                color = palette[0]
+            elif interference < 0.67:
+                color = palette[len(palette) // 2]
+            else:
+                color = palette[-1]
+            
+            r, g, b = color
+            
+            # Modulate colors with interference
+            r = int(r * (0.5 + interference * 0.5))
+            g = int(g * (0.5 + interference * 0.5))
+            b = int(b * (0.5 + interference * 0.5))
+            
+            brightness = 0.3 + interference * 0.4 + intensity * 0.3
+            brightness *= self.dimming
+            
+            self._set_light_color(data, i, r, g, b, brightness)
+            
+    def _program_color_ripples(self, data, audio_state):
+        """Ripples of color emanating from beat-triggered centers."""
+        intensity = audio_state['intensity']
+        
+        palette = self._get_color_palette()
+        
+        # Trigger new ripple on beat
+        if self._should_trigger_effect() and len(self.color_ripple_centers) < 3:
+            # Add new ripple at random position
+            self.color_ripple_centers.append({
+                'position': random.randint(0, self.active_lights - 1),
+                'radius': 0.0,
+                'color': random.choice(palette),
+                'speed': 0.1 + random.random() * 0.1
+            })
+        
+        # Update and render ripples
+        for i in range(self.active_lights):
+            r_total, g_total, b_total = 0, 0, 0
+            brightness_total = 0
+            active_ripples = 0
+            
+            # Process each ripple
+            for ripple in self.color_ripple_centers[:]:
+                ripple['radius'] += ripple['speed'] / max(1, self.bpm_division)
+                
+                # Remove ripple if it's too large
+                if ripple['radius'] > self.active_lights:
+                    self.color_ripple_centers.remove(ripple)
+                    continue
+                
+                # Calculate distance from ripple center
+                distance = abs(i - ripple['position'])
+                
+                # Check if this light is affected by the ripple
+                if abs(distance - ripple['radius']) < 1.5:
+                    # Calculate ripple intensity (bell curve)
+                    ripple_intensity = math.exp(-((distance - ripple['radius']) ** 2) / 0.5)
+                    
+                    r, g, b = ripple['color']
+                    r_total += r * ripple_intensity
+                    g_total += g * ripple_intensity
+                    b_total += b * ripple_intensity
+                    brightness_total += ripple_intensity
+                    active_ripples += 1
+            
+            # Average the ripple effects
+            if active_ripples > 0:
+                r = min(255, int(r_total / active_ripples))
+                g = min(255, int(g_total / active_ripples))
+                b = min(255, int(b_total / active_ripples))
+                brightness = min(1.0, brightness_total / active_ripples)
+            else:
+                # Dim background
+                r, g, b = palette[0]
+                brightness = 0.1
+            
+            brightness *= (0.5 + intensity * 0.5) * self.dimming
             self._set_light_color(data, i, r, g, b, brightness)
