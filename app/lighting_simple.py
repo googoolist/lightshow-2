@@ -168,6 +168,11 @@ class SimpleDmxController(BaseDmxController):
         # Get current audio state
         audio_state = self.audio_analyzer.get_state()
         intensity = audio_state['intensity']
+        audio_active = audio_state['audio_active']
+        
+        # If audio is not active, return blackout frame
+        if not audio_active:
+            return data
         
         # Select program method
         if self.program == "Bounce (Same Color)":
