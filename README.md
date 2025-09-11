@@ -71,28 +71,30 @@ Edit `config.py` to customize:
 ### DMX Settings
 ```python
 DMX_UNIVERSE = 1                   # OLA universe
-DMX_CHANNELS = 64                  # Total channels (8 lights × 8 channels)
+DMX_CHANNELS = 56                  # Total channels (8 lights × 7 channels)
 DEFAULT_LIGHT_COUNT = 3            # Starting number of lights
 MAX_LIGHTS = 8                     # Maximum supported
 ```
 
-### Light Channel Mapping
-Each PAR light uses 8 DMX channels:
-- Channel 1: Dimmer
-- Channel 2: Red
-- Channel 3: Green  
-- Channel 4: Blue
-- Channel 5: White (if available)
-- Channel 6: Strobe (if available)
-- Channel 7: Mode/Macro
-- Channel 8: (Reserved)
+### Light Channel Mapping (7CH Mode)
+Each PAR light uses 7 DMX channels:
+- Channel 1: Master Dimming (0-255)
+- Channel 2: Red Dimming (0-255)
+- Channel 3: Green Dimming (0-255)  
+- Channel 4: Blue Dimming (0-255)
+- Channel 5: Strobe (0-10: off, 10-255: speed)
+- Channel 6: Mode (0-9: manual, we use 0)
+- Channel 7: Speed (0-255: for built-in effects, we use 0)
 
-Default assignments:
-- PAR 1: DMX 1-8
-- PAR 2: DMX 9-16
-- PAR 3: DMX 17-24
-- PAR 4: DMX 25-32
-- (up to PAR 8: DMX 57-64)
+DMX Address Assignments:
+- PAR 1: DMX 1-7
+- PAR 2: DMX 8-14
+- PAR 3: DMX 15-21
+- PAR 4: DMX 22-28
+- PAR 5: DMX 29-35
+- PAR 6: DMX 36-42
+- PAR 7: DMX 43-49
+- PAR 8: DMX 50-56
 
 ### Audio Settings
 ```python
@@ -133,7 +135,13 @@ cd ~/lightshow-2/app
 
 The system starts in **Simple Mode** by default. Use the radio buttons at the top to switch between modes.
 
-## Simple Mode Controls
+## Simple Mode Interface
+
+The Simple mode interface is optimized for 320x480 touchscreens with a compact two-column layout:
+- **Status Bar**: Audio indicator, BPM, and Level display at the top
+- **Left Column**: Program selector dropdown
+- **Right Column**: BPM Sync dropdown  
+- **Bottom Section**: Dimming slider, Cool Colors checkbox, Lights counter
 
 ### Program Selector
 Choose from 15 preset programs:
@@ -161,13 +169,13 @@ Choose from 15 preset programs:
 
 ### Simple Mode Controls
 
-#### BPM Sync Slider
+#### BPM Sync Dropdown
 Controls how often effects trigger based on detected BPM:
-- **1x**: Every beat (fastest)
-- **2x**: Every 2nd beat (half speed)
-- **4x**: Every 4th beat (quarter speed)
-- **8x**: Every 8th beat
-- **16x**: Every 16th beat (slowest)
+- **Every beat**: Triggers at full BPM rate
+- **Every 2 beats**: Half speed  
+- **Every 4 beats**: Quarter speed
+- **Every 8 beats**: 1/8 speed
+- **Every 16 beats**: Slowest (1/16 speed)
 
 Example: At 120 BPM with 4x setting, effects trigger every 2 seconds (30 times per minute)
 

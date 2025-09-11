@@ -33,52 +33,59 @@ class SimpleUI:
         
     def _create_widgets(self):
         """Create simple UI widgets."""
-        # Main container with padding
-        main_frame = ttk.Frame(self.parent, padding="10")
+        # Main container with minimal padding
+        main_frame = ttk.Frame(self.parent, padding="5")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Status display at the TOP - more prominent
+        # Status bar in the mode selector space - compact
         status_frame = ttk.Frame(main_frame)
-        status_frame.pack(fill=tk.X, pady=(0, 10))
+        status_frame.pack(fill=tk.X, pady=(0, 5))
         
         # Audio indicator (small colored circle)
-        self.status_indicator = tk.Canvas(status_frame, width=15, height=15)
-        self.status_indicator.pack(side=tk.LEFT, padx=(0, 5))
+        self.status_indicator = tk.Canvas(status_frame, width=10, height=10)
+        self.status_indicator.pack(side=tk.LEFT, padx=(0, 3))
         self.status_circle = self.status_indicator.create_oval(
-            2, 2, 13, 13, fill='gray', outline='black'
+            1, 1, 9, 9, fill='gray', outline='black'
         )
         
         # Audio status
         self.audio_status = ttk.Label(
             status_frame,
             text="No Audio",
-            font=('Arial', 11)
+            font=('Arial', 9)
         )
-        self.audio_status.pack(side=tk.LEFT, padx=(0, 15))
+        self.audio_status.pack(side=tk.LEFT, padx=(0, 10))
         
         # BPM display
-        ttk.Label(status_frame, text="BPM:", font=('Arial', 11, 'bold')).pack(side=tk.LEFT)
+        ttk.Label(status_frame, text="BPM:", font=('Arial', 9, 'bold')).pack(side=tk.LEFT)
         self.bpm_label = ttk.Label(
             status_frame,
             text="--",
-            font=('Arial', 11, 'bold'),
+            font=('Arial', 9, 'bold'),
             foreground='blue'
         )
-        self.bpm_label.pack(side=tk.LEFT, padx=(3, 15))
+        self.bpm_label.pack(side=tk.LEFT, padx=(2, 10))
         
         # Level display
-        ttk.Label(status_frame, text="Level:", font=('Arial', 11, 'bold')).pack(side=tk.LEFT)
+        ttk.Label(status_frame, text="Level:", font=('Arial', 9, 'bold')).pack(side=tk.LEFT)
         self.intensity_label = ttk.Label(
             status_frame,
             text="0%",
-            font=('Arial', 11, 'bold'),
+            font=('Arial', 9, 'bold'),
             foreground='green'
         )
-        self.intensity_label.pack(side=tk.LEFT, padx=(3, 0))
+        self.intensity_label.pack(side=tk.LEFT, padx=(2, 0))
         
-        # Program selector
-        program_frame = ttk.LabelFrame(main_frame, text="Program", padding="10")
-        program_frame.pack(fill=tk.X, pady=(0, 10))
+        # Two-column layout for program and controls
+        columns_frame = ttk.Frame(main_frame)
+        columns_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
+        
+        # Left column - Program selector
+        left_col = ttk.Frame(columns_frame)
+        left_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 3))
+        
+        program_frame = ttk.LabelFrame(left_col, text="Program", padding="5")
+        program_frame.pack(fill=tk.BOTH, expand=True)
         
         self.program_var = tk.StringVar(value="Bounce (Same Color)")
         self.program_combo = ttk.Combobox(
@@ -102,21 +109,18 @@ class SimpleUI:
                 "Alternating"
             ],
             state="readonly",
-            font=('Arial', 11),
-            width=25
+            font=('Arial', 9),
+            width=18
         )
         self.program_combo.pack(fill=tk.X)
         self.program_combo.bind("<<ComboboxSelected>>", self._on_program_change)
         
-        # Controls frame
-        controls_frame = ttk.LabelFrame(main_frame, text="Controls", padding="10")
-        controls_frame.pack(fill=tk.X, pady=(0, 10))
+        # Right column - BPM Sync
+        right_col = ttk.Frame(columns_frame)
+        right_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(3, 0))
         
-        # BPM Sync control (dropdown like Advanced mode)
-        bpm_frame = ttk.Frame(controls_frame)
-        bpm_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        ttk.Label(bpm_frame, text="BPM Sync:", font=('Arial', 10, 'bold')).pack(anchor=tk.W)
+        bpm_frame = ttk.LabelFrame(right_col, text="BPM Sync", padding="5")
+        bpm_frame.pack(fill=tk.BOTH, expand=True)
         
         self.bpm_sync_var = tk.StringVar(value="Every beat")
         self.bpm_sync_combo = ttk.Combobox(
@@ -124,25 +128,23 @@ class SimpleUI:
             textvariable=self.bpm_sync_var,
             values=["Every beat", "Every 2 beats", "Every 4 beats", "Every 8 beats", "Every 16 beats"],
             state="readonly",
-            width=15,
-            font=('Arial', 10)
+            width=13,
+            font=('Arial', 9)
         )
-        self.bpm_sync_combo.pack(fill=tk.X, pady=(2, 0))
+        self.bpm_sync_combo.pack(fill=tk.X)
         self.bpm_sync_combo.bind("<<ComboboxSelected>>", self._on_bpm_sync_change)
         
-        # Dimming control
-        dim_frame = ttk.Frame(controls_frame)
-        dim_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        ttk.Label(dim_frame, text="Dimming:", font=('Arial', 10, 'bold')).pack(anchor=tk.W)
+        # Dimming control - below the columns
+        dim_frame = ttk.LabelFrame(main_frame, text="Dimming", padding="5")
+        dim_frame.pack(fill=tk.X, pady=(0, 5))
         
         # Dimming slider with percentage display
         slider_frame = ttk.Frame(dim_frame)
-        slider_frame.pack(fill=tk.X, pady=(5, 0))
+        slider_frame.pack(fill=tk.X)
         
         self.dimming_var = tk.DoubleVar(value=100.0)  # Default 100%
         
-        ttk.Label(slider_frame, text="0%", font=('Arial', 9)).pack(side=tk.LEFT)
+        ttk.Label(slider_frame, text="0%", font=('Arial', 8)).pack(side=tk.LEFT)
         
         self.dimming_scale = ttk.Scale(
             slider_frame,
@@ -152,33 +154,33 @@ class SimpleUI:
             variable=self.dimming_var,
             command=self._on_dimming_change
         )
-        self.dimming_scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 5))
+        self.dimming_scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(3, 3))
         
-        ttk.Label(slider_frame, text="100%", font=('Arial', 9)).pack(side=tk.LEFT)
+        ttk.Label(slider_frame, text="100%", font=('Arial', 8)).pack(side=tk.LEFT)
         
         # Dimming percentage label
-        self.dimming_label = ttk.Label(dim_frame, text="Current: 100%", font=('Arial', 9))
-        self.dimming_label.pack(anchor=tk.W, pady=(5, 0))
+        self.dimming_label = ttk.Label(slider_frame, text="(100%)", font=('Arial', 8))
+        self.dimming_label.pack(side=tk.LEFT, padx=(5, 0))
         
         # Cool Colors checkbox
         self.cool_colors_var = tk.BooleanVar(value=False)
         self.cool_colors_check = ttk.Checkbutton(
-            controls_frame,
-            text="Cool Colors Only (no reds/oranges)",
+            main_frame,
+            text="Cool Colors Only",
             variable=self.cool_colors_var,
             command=self._on_cool_colors_toggle
         )
-        self.cool_colors_check.pack(anchor=tk.W, pady=(5, 0))
+        self.cool_colors_check.pack(anchor=tk.W, pady=(3, 5))
         
         # Light count control
-        lights_frame = ttk.LabelFrame(main_frame, text="Lights", padding="10")
-        lights_frame.pack(fill=tk.X, pady=(0, 10))
+        lights_frame = ttk.LabelFrame(main_frame, text="Lights", padding="5")
+        lights_frame.pack(fill=tk.X)
         
         # Light count controls in a horizontal layout
         lights_control = ttk.Frame(lights_frame)
         lights_control.pack(fill=tk.X)
         
-        ttk.Label(lights_control, text="Active Lights:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Label(lights_control, text="Active:", font=('Arial', 9, 'bold')).pack(side=tk.LEFT, padx=(0, 5))
         
         # Decrement button
         ttk.Button(
@@ -193,8 +195,8 @@ class SimpleUI:
         self.light_count_label = ttk.Label(
             lights_control,
             text=str(config.DEFAULT_LIGHT_COUNT),
-            font=('Arial', 11, 'bold'),
-            width=3
+            font=('Arial', 10, 'bold'),
+            width=2
         )
         self.light_count_label.pack(side=tk.LEFT, padx=(0, 5))
         
@@ -210,9 +212,9 @@ class SimpleUI:
         ttk.Label(
             lights_control,
             text=f"(1-{config.MAX_LIGHTS})",
-            font=('Arial', 9),
+            font=('Arial', 8),
             foreground='gray'
-        ).pack(side=tk.LEFT, padx=(10, 0))
+        ).pack(side=tk.LEFT, padx=(5, 0))
         
         
         
@@ -241,7 +243,7 @@ class SimpleUI:
     def _on_dimming_change(self, value):
         """Handle dimming slider change."""
         percent = float(value)
-        self.dimming_label.config(text=f"Current: {int(percent)}%")
+        self.dimming_label.config(text=f"({int(percent)}%)")
         
         if self.dmx_controller:
             # Convert percentage to 0.0-1.0
@@ -257,7 +259,7 @@ class SimpleUI:
         """Schedule periodic display updates."""
         self._update_display()
         if not self.stop_event.is_set():
-            self.parent.after(500, self._schedule_update)  # Update every 500ms
+            self.parent.after(250, self._schedule_update)  # Update every 250ms
             
     def _update_display(self):
         """Update status display with current audio state."""

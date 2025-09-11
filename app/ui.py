@@ -75,7 +75,7 @@ class MainUI:
         ttk.Label(
             mode_frame,
             text="Mode:",
-            font=('Arial', 11, 'bold')
+            font=('Arial', 10, 'bold')
         ).pack(side=tk.LEFT, padx=(10, 5))
         
         # Radio buttons for mode selection
@@ -88,7 +88,7 @@ class MainUI:
             value="simple",
             command=self._on_mode_change
         )
-        self.simple_radio.pack(side=tk.LEFT, padx=(0, 10))
+        self.simple_radio.pack(side=tk.LEFT, padx=(0, 5))
         
         self.advanced_radio = ttk.Radiobutton(
             mode_frame,
@@ -98,15 +98,6 @@ class MainUI:
             command=self._on_mode_change
         )
         self.advanced_radio.pack(side=tk.LEFT, padx=(0, 10))
-        
-        # Mode description
-        self.mode_description = ttk.Label(
-            mode_frame,
-            text="Simple: Preset programs with easy controls",
-            font=('Arial', 9),
-            foreground='gray'
-        )
-        self.mode_description.pack(side=tk.LEFT, padx=(20, 10))
         
         # Quit button (right side)
         self.quit_button = ttk.Button(
@@ -135,7 +126,6 @@ class MainUI:
         
         # Update mode
         self.current_mode = "simple"
-        self.mode_description.config(text="Simple: Preset programs with easy controls")
         
         # Stop advanced controller if running
         if self.advanced_controller and hasattr(self.advanced_controller, 'stop'):
@@ -161,7 +151,6 @@ class MainUI:
         
         # Update mode
         self.current_mode = "advanced"
-        self.mode_description.config(text="Advanced: Full control over all parameters")
         
         # Stop simple controller if running
         if self.simple_controller and hasattr(self.simple_controller, 'stop'):
