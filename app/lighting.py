@@ -84,29 +84,39 @@ class DmxController:
         # DMX frame update interval (milliseconds)
         self.update_interval = int(1000 / config.UPDATE_FPS)
         
-    def _initialize_colors(self):
+    def _initialize_colors(self, already_locked=False):
         """Initialize starting colors based on rainbow level."""
-        if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
-            try:
-                # Use selected color theme
-                palette = config.COLOR_THEMES.get(self.color_theme, config.SMOOTH_COLOR_PALETTE)
-                
-                if self.rainbow_level < 0.2:
-                    # Single color mode - all lights same color
-                    color = palette[0]
-                    for i in range(self.active_lights):
-                        self.target_colors[i] = color
-                        self.current_colors[i] = color
-                else:
-                    # Diverse colors - spread across palette
-                    palette_size = len(palette)
-                    spread = int(palette_size * self.rainbow_level / max(3, self.active_lights))
-                    for i in range(self.active_lights):
-                        idx = (i * spread) % palette_size
-                        self.target_colors[i] = palette[idx]
-                        self.current_colors[i] = self.target_colors[i]
-            finally:
-                self.control_lock.release()
+        # Only acquire lock if not already held
+        if already_locked:
+            self._do_initialize_colors()
+        else:
+            if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
+                try:
+                    self._do_initialize_colors()
+                finally:
+                    self.control_lock.release()
+    
+    def _do_initialize_colors(self):
+        """Actually initialize colors (assumes lock is held)."""
+        # Use selected color theme
+        palette = config.COLOR_THEMES.get(self.color_theme, config.SMOOTH_COLOR_PALETTE)
+        
+        if self.rainbow_level < 0.2:
+            # Single color mode - all lights same color
+            color = palette[0]
+            for i in range(self.active_lights):
+                self.target_colors[i] = color
+                self.current_colors[i] = color
+        else:
+            # Diverse colors - spread across palette
+            palette_size = len(palette)
+            # Ensure spread is at least 1 to avoid division issues
+            spread = max(1, int(palette_size * self.rainbow_level))
+            for i in range(self.active_lights):
+                # Distribute colors evenly across active lights
+                idx = (i * spread // max(1, self.active_lights)) % palette_size
+                self.target_colors[i] = palette[idx]
+                self.current_colors[i] = self.target_colors[i]
     
     def start(self):
         """Start the DMX control thread."""
@@ -128,8 +138,12 @@ class DmxController:
         if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
             try:
                 self.rainbow_level = max(0.0, min(1.0, value))
+                # Don't update colors here - let the main loop handle it
             finally:
                 self.control_lock.release()
+        else:
+            # If we can't get the lock, just skip this update
+            pass
     
     def set_brightness(self, value):
         """Set the master brightness level (0.0 = dim, 1.0 = full brightness)."""
@@ -181,7 +195,7 @@ class DmxController:
             if self.control_lock.acquire(timeout=0.01):
                 try:
                     self.color_theme = theme_name
-                    self._initialize_colors()  # Reinit with new palette
+                    self._do_initialize_colors()  # Call directly since we already have the lock
                 finally:
                     self.control_lock.release()
     
@@ -265,6 +279,37 @@ class DmxController:
         # Reinitialize colors outside the lock if count changed
         if needs_reinit:
             self._initialize_colors()
+    
+    def reset(self):
+        """Reset controller to default state."""
+        if self.control_lock.acquire(timeout=0.1):  # Longer timeout for reset
+            try:
+                # Reset all parameters to defaults
+                self.smoothness = 0.8
+                self.rainbow_level = 0.3
+                self.brightness_control = 0.5
+                self.strobe_level = 0.0
+                self.beat_sensitivity = 0.3
+                self.mood_match = False
+                self.pattern = "wave"
+                self.frequency_mode = False
+                self.color_theme = 'default'
+                self.effect_mode = 'none'
+                self.echo_enabled = False
+                self.echo_length = 0.5
+                self.chaos_level = 0.0
+                self.ambient_mode = False
+                self.genre_auto = False
+                self.active_lights = config.DEFAULT_LIGHT_COUNT
+                
+                # Clear buffers
+                self.echo_buffer.clear()
+                self.effect_phase = 0.0
+                
+                # Reinitialize colors
+                self._do_initialize_colors()
+            finally:
+                self.control_lock.release()
     
     def _setup_ola(self):
         """Initialize OLA client connection."""
@@ -666,8 +711,12 @@ class DmxController:
             
             # Blend between current and next color in palette
             base_color = self.current_colors[light_index]
-            next_idx = (light_index + 1) % self.active_lights
-            next_color = self.current_colors[next_idx]
+            next_idx = (light_index + 1) % max(1, self.active_lights)
+            # Ensure we don't go out of bounds
+            if next_idx < len(self.current_colors):
+                next_color = self.current_colors[next_idx]
+            else:
+                next_color = self.current_colors[0]  # Wrap to first
             
             r = int(base_color[0] * (1 - wave_factor) + next_color[0] * wave_factor)
             g = int(base_color[1] * (1 - wave_factor) + next_color[1] * wave_factor)

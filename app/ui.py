@@ -97,6 +97,15 @@ class AudioReactiveLightingGUI:
         )
         self.quit_button.pack(side=tk.RIGHT)
         
+        # Reset button (next to quit)
+        self.reset_button = ttk.Button(
+            status_frame,
+            text="Reset",
+            command=self._on_reset,
+            width=5
+        )
+        self.reset_button.pack(side=tk.RIGHT, padx=(0, 5))
+        
         # Create notebook for tabs
         self.notebook = ttk.Notebook(main_frame)
         self.notebook.pack(fill=tk.BOTH, expand=True)
@@ -638,6 +647,41 @@ class AudioReactiveLightingGUI:
         
         if self.dmx_controller:
             self.dmx_controller.set_light_count(count)
+    
+    def _on_reset(self):
+        """Reset all controls to default values."""
+        # First, call the controller's reset method for a thorough reset
+        if self.dmx_controller:
+            self.dmx_controller.reset()
+        
+        # Reset all UI elements to match defaults
+        self.smoothness_var.set(0.2)  # 0.2 = 80% smoothness (inverted)
+        self.rainbow_var.set(0.3)  # 30% rainbow
+        self.brightness_var.set(0.5)  # 50% brightness
+        self.strobe_var.set(0.0)  # No strobe
+        self.beat_sensitivity_var.set(0.3)  # 30% beat sensitivity
+        
+        # Reset Effects tab controls if they exist
+        if hasattr(self, 'chaos_var'):
+            self.chaos_var.set(0.0)  # No chaos
+        if hasattr(self, 'echo_var'):
+            self.echo_var.set(0.0)  # No echo
+        
+        # Reset dropdowns
+        self.theme_var.set("Default")
+        self.effect_var.set("None")
+        self.pattern_var.set("Wave")
+        
+        # Reset checkboxes
+        self.mood_match_var.set(False)
+        self.frequency_var.set(False)
+        self.ambient_var.set(False)
+        self.genre_var.set(False)
+        
+        # Reset light count
+        self.light_count_var.set(config.DEFAULT_LIGHT_COUNT)
+        self.light_count_label.config(text=str(config.DEFAULT_LIGHT_COUNT))
+        self.info_label.config(text=f"{config.DEFAULT_LIGHT_COUNT} PAR • DMX 1")
     
     def _on_quit(self):
         """Handle quit button click."""
