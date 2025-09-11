@@ -719,46 +719,46 @@ class DmxController:
         if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
             try:
                 current_time = time.time()
-            
-            # Determine color change frequency with expanded smoothness range
-            if self.rainbow_level < 0.2:
-                # Single color mode - change slowly
-                if self.smoothness < 0.5:
-                    change_interval = 4.0 + self.smoothness * 8.0  # 4-8 seconds (fast)
+                
+                # Determine color change frequency with expanded smoothness range
+                if self.rainbow_level < 0.2:
+                    # Single color mode - change slowly
+                    if self.smoothness < 0.5:
+                        change_interval = 4.0 + self.smoothness * 8.0  # 4-8 seconds (fast)
+                    else:
+                        change_interval = 8.0 + (self.smoothness - 0.5) * 24.0  # 8-20 seconds (slow)
+                    change_on_beat = False
+                elif self.rainbow_level < 0.5:
+                    # Moderate diversity - change occasionally
+                    if self.smoothness < 0.5:
+                        change_interval = 2.0 + self.smoothness * 4.0  # 2-4 seconds (fast)
+                    else:
+                        change_interval = 4.0 + (self.smoothness - 0.5) * 8.0  # 4-8 seconds (slow)
+                    change_on_beat = beat_occurred and intensity > 0.6
+                elif self.rainbow_level < 0.8:
+                    # High diversity - change frequently
+                    if self.smoothness < 0.5:
+                        change_interval = 1.0 + self.smoothness * 2.0  # 1-2 seconds (fast)
+                    else:
+                        change_interval = 2.0 + (self.smoothness - 0.5) * 4.0  # 2-4 seconds (slow)
+                    change_on_beat = beat_occurred and intensity > 0.4
                 else:
-                    change_interval = 8.0 + (self.smoothness - 0.5) * 24.0  # 8-20 seconds (slow)
-                change_on_beat = False
-            elif self.rainbow_level < 0.5:
-                # Moderate diversity - change occasionally
-                if self.smoothness < 0.5:
-                    change_interval = 2.0 + self.smoothness * 4.0  # 2-4 seconds (fast)
-                else:
-                    change_interval = 4.0 + (self.smoothness - 0.5) * 8.0  # 4-8 seconds (slow)
-                change_on_beat = beat_occurred and intensity > 0.6
-            elif self.rainbow_level < 0.8:
-                # High diversity - change frequently
-                if self.smoothness < 0.5:
-                    change_interval = 1.0 + self.smoothness * 2.0  # 1-2 seconds (fast)
-                else:
-                    change_interval = 2.0 + (self.smoothness - 0.5) * 4.0  # 2-4 seconds (slow)
-                change_on_beat = beat_occurred and intensity > 0.4
-            else:
-                # Full rainbow - change on every beat or quickly
-                if self.smoothness < 0.5:
-                    change_interval = 0.5 + self.smoothness * 1.0  # 0.5-1 seconds (fast)
-                else:
-                    change_interval = 1.0 + (self.smoothness - 0.5) * 2.0  # 1-2 seconds (slow)
-                change_on_beat = beat_occurred
-            
-            # Check if it's time to change colors
-            time_to_change = current_time - self.last_color_change > change_interval
-            
-            if time_to_change or change_on_beat:
-                self.last_color_change = current_time
-                self._select_new_colors()
-            
-            # Update fade progress for smooth transitions
-            self._update_color_fades()
+                    # Full rainbow - change on every beat or quickly
+                    if self.smoothness < 0.5:
+                        change_interval = 0.5 + self.smoothness * 1.0  # 0.5-1 seconds (fast)
+                    else:
+                        change_interval = 1.0 + (self.smoothness - 0.5) * 2.0  # 1-2 seconds (slow)
+                    change_on_beat = beat_occurred
+                
+                # Check if it's time to change colors
+                time_to_change = current_time - self.last_color_change > change_interval
+                
+                if time_to_change or change_on_beat:
+                    self.last_color_change = current_time
+                    self._select_new_colors()
+                
+                # Update fade progress for smooth transitions
+                self._update_color_fades()
             finally:
                 self.control_lock.release()
     
