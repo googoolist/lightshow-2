@@ -38,20 +38,24 @@ class DmxController:
         self.last_beat_time = 0
         
         # Color state for smooth transitions (sized for max lights)
-        self.target_colors = [(0, 0, 0)] * config.MAX_LIGHTS  # Target colors for each PAR
-        self.current_colors = [(0, 0, 0)] * config.MAX_LIGHTS  # Current colors for smooth fading
+        # Start with diverse colors instead of all black/red
+        initial_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), 
+                         (255, 0, 255), (0, 255, 255), (255, 128, 0), (128, 0, 255)]
+        self.target_colors = [initial_colors[i % len(initial_colors)] for i in range(config.MAX_LIGHTS)]
+        self.current_colors = [initial_colors[i % len(initial_colors)] for i in range(config.MAX_LIGHTS)]
         self.color_fade_progress = [0.0] * config.MAX_LIGHTS  # Fade progress for each PAR
         self.last_color_change = 0
         self.color_phases = [i * 0.2 for i in range(config.MAX_LIGHTS)]  # Phase offset for smooth waves
         
-        # Control parameters - midpoint defaults for balanced effect
-        self.smoothness = 0.8  # Default to smoother transitions
-        self.rainbow_level = 0.3  # Less aggressive color changing
+        # Control parameters - more responsive defaults
+        self.smoothness = 0.5  # More balanced transitions
+        self.rainbow_level = 0.5  # More color diversity
         self.brightness_control = 0.5  # Default midpoint (0.0 = dim, 1.0 = full)
         self.strobe_level = 0.0  # Default off (0.0 = off, 1.0 = max)
-        self.beat_sensitivity = 0.3  # Less aggressive beat response
+        self.beat_sensitivity = 0.5  # More beat response
         self.mood_match = False  # Default off - intensity-based color temperature
         self.pattern = "wave"  # Default to wave pattern for motion
+        self.bpm_sync = 1.0  # BPM sync percentage (0.25 = 25% speed, 1.0 = 100%, 2.0 = 200%)
         
         # New controls
         self.frequency_mode = False  # Frequency-based colors
@@ -102,23 +106,27 @@ class DmxController:
         """Actually initialize colors (assumes lock is held)."""
         # Use selected color theme
         palette = config.COLOR_THEMES.get(self.color_theme, config.SMOOTH_COLOR_PALETTE)
+        palette_size = len(palette) if palette else 1
         
-        if self.rainbow_level < 0.2:
-            # Single color mode - all lights same color
-            color = palette[0]
-            for i in range(self.active_lights):
+        # Distribute colors across lights based on rainbow level
+        for i in range(config.MAX_LIGHTS):
+            if i < self.active_lights:
+                if self.rainbow_level < 0.2:
+                    # Single color mode - cycle through palette slowly
+                    idx = 0
+                else:
+                    # Spread colors based on rainbow level
+                    # Higher rainbow = more diversity
+                    step = max(1, int(palette_size * self.rainbow_level / max(1, self.active_lights)))
+                    idx = (i * step) % palette_size
+                
+                color = palette[idx] if idx < len(palette) else palette[0]
                 self.target_colors[i] = color
                 self.current_colors[i] = color
-        else:
-            # Diverse colors - spread across palette
-            palette_size = len(palette)
-            # Ensure spread is at least 1 to avoid division issues
-            spread = max(1, int(palette_size * self.rainbow_level))
-            for i in range(self.active_lights):
-                # Distribute colors evenly across active lights
-                idx = (i * spread // max(1, self.active_lights)) % palette_size
-                self.target_colors[i] = palette[idx]
-                self.current_colors[i] = self.target_colors[i]
+            else:
+                # Inactive lights stay off
+                self.target_colors[i] = (0, 0, 0)
+                self.current_colors[i] = (0, 0, 0)
     
     def start(self):
         """Start the DMX control thread."""
@@ -262,6 +270,14 @@ class DmxController:
             finally:
                 self.control_lock.release()
     
+    def set_bpm_sync(self, value):
+        """Set BPM sync percentage (0.25 = 25% speed, 1.0 = 100%, 2.0 = 200%)."""
+        if self.control_lock.acquire(timeout=0.01):
+            try:
+                self.bpm_sync = max(0.1, min(2.0, value))
+            finally:
+                self.control_lock.release()
+    
     def set_pattern(self, pattern_name):
         """Set the lighting pattern (sync, wave, center, alternate, mirror, swell)."""
         valid_patterns = ["sync", "wave", "center", "alternate", "mirror", "swell"]
@@ -298,11 +314,12 @@ class DmxController:
         if self.control_lock.acquire(timeout=0.1):  # Longer timeout for reset
             try:
                 # Reset all parameters to defaults
-                self.smoothness = 0.8
-                self.rainbow_level = 0.3
+                self.smoothness = 0.5
+                self.rainbow_level = 0.5
                 self.brightness_control = 0.5
                 self.strobe_level = 0.0
-                self.beat_sensitivity = 0.3
+                self.beat_sensitivity = 0.5
+                self.bpm_sync = 1.0
                 self.mood_match = False
                 self.pattern = "wave"
                 self.frequency_mode = False
@@ -864,31 +881,34 @@ class DmxController:
             try:
                 current_time = time.time()
                 
-                # Special timing for swell pattern - ultra slow changes
+                # Apply BPM sync to timing
+                bpm_factor = 1.0 / max(0.1, self.bpm_sync)  # Invert: lower sync = slower changes
+                
+                # Special timing for swell pattern
                 if self.pattern == "swell":
-                    change_interval = 15.0 + self.smoothness * 30.0  # 15-45 seconds
+                    change_interval = (5.0 + self.smoothness * 10.0) * bpm_factor  # 5-15 seconds base
                     change_on_beat = False  # No beat triggers for swell
                 # Spectrum mode - frequency-driven changes
                 elif self.spectrum_mode:
-                    change_interval = 8.0 + self.smoothness * 12.0  # 8-20 seconds
+                    change_interval = (3.0 + self.smoothness * 5.0) * bpm_factor  # 3-8 seconds base
                     change_on_beat = False  # No beat triggers in spectrum mode
-                # Normal color transitions
+                # Normal color transitions - MUCH FASTER
                 elif self.rainbow_level < 0.2:
-                    # Single color mode - very slow changes
-                    change_interval = 10.0 + self.smoothness * 20.0  # 10-30 seconds
+                    # Single color mode
+                    change_interval = (3.0 + self.smoothness * 5.0) * bpm_factor  # 3-8 seconds
                     change_on_beat = False
                 elif self.rainbow_level < 0.5:
-                    # Moderate diversity - gradual changes
-                    change_interval = 5.0 + self.smoothness * 10.0  # 5-15 seconds
-                    change_on_beat = beat_occurred and intensity > 0.7 and self.beat_sensitivity > 0.5
+                    # Moderate diversity
+                    change_interval = (2.0 + self.smoothness * 3.0) * bpm_factor  # 2-5 seconds
+                    change_on_beat = beat_occurred and intensity > 0.6
                 elif self.rainbow_level < 0.8:
-                    # High diversity - steady changes
-                    change_interval = 3.0 + self.smoothness * 5.0  # 3-8 seconds
-                    change_on_beat = beat_occurred and intensity > 0.5 and self.beat_sensitivity > 0.3
+                    # High diversity
+                    change_interval = (1.0 + self.smoothness * 2.0) * bpm_factor  # 1-3 seconds
+                    change_on_beat = beat_occurred and intensity > 0.4
                 else:
-                    # Full rainbow - regular changes
-                    change_interval = 2.0 + self.smoothness * 3.0  # 2-5 seconds
-                    change_on_beat = beat_occurred and self.beat_sensitivity > 0.2
+                    # Full rainbow - fast changes
+                    change_interval = (0.5 + self.smoothness * 1.0) * bpm_factor  # 0.5-1.5 seconds
+                    change_on_beat = beat_occurred
                 
                 # Check if it's time to change colors
                 time_to_change = current_time - self.last_color_change > change_interval
@@ -983,18 +1003,18 @@ class DmxController:
     
     def _update_color_fades(self):
         """Update the fade progress for color transitions."""
-        # Calculate fade speed with expanded range (10x range)
-        # Smoothness 0.0 = super fast (fade_speed = 2.0) - instant changes
-        # Smoothness 0.5 = moderate (fade_speed = ~0.02) - balanced
-        # Smoothness 1.0 = ultra slow (fade_speed = 0.0005) - extremely gentle
-        if self.smoothness < 0.5:
-            # Fast range: 2.0 to 0.02 (100x range)
-            fade_speed = 2.0 - (self.smoothness * 2 * 0.99)
-        else:
-            # Slow range: 0.02 to 0.0005 (40x range)
-            fade_speed = 0.02 - ((self.smoothness - 0.5) * 2 * 0.01975)
+        # Simpler, faster fade speed calculation
+        # Apply BPM sync to fade speed too
+        bpm_factor = max(0.1, self.bpm_sync)
         
-        for i in range(3):
+        # Smoothness 0.0 = instant changes
+        # Smoothness 0.5 = balanced (0.5 second fade)
+        # Smoothness 1.0 = slow (2 second fade)
+        fade_time = 0.1 + self.smoothness * 1.9  # 0.1 to 2.0 seconds
+        fade_speed = (1.0 / (fade_time * config.UPDATE_FPS)) * bpm_factor
+        
+        # Update ALL active lights, not just 3
+        for i in range(self.active_lights):
             if self.color_fade_progress[i] < 1.0:
                 self.color_fade_progress[i] = min(1.0, self.color_fade_progress[i] + fade_speed)
                 

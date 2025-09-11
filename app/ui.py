@@ -142,18 +142,18 @@ class AudioReactiveLightingGUI:
         right_col = ttk.Frame(controls_container)
         right_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(3, 0))
         
-        # Speed control (left column) - default to smoother
+        # Speed control (left column) - balanced default
         self._create_slider_control(
             left_col, "Speed", 
             self._on_smoothness_change,
-            0.2, "Slow", "Fast"  # 0.2 = 80% smoothness (inverted)
+            0.5, "Slow", "Fast"  # 0.5 = 50% smoothness (inverted)
         )
         
-        # Rainbow control (left column) - less aggressive
+        # Rainbow control (left column) - more diversity
         self._create_slider_control(
             left_col, "Rainbow",
             self._on_rainbow_change,
-            0.3, "Single", "Full"  # 0.3 = 30% rainbow
+            0.5, "Single", "Full"  # 0.5 = 50% rainbow
         )
         
         # Brightness control (left column)
@@ -170,11 +170,18 @@ class AudioReactiveLightingGUI:
             0.0, "Off", "Max"
         )
         
-        # Beat Sensitivity control (right column) - less aggressive
+        # Beat Sensitivity control (right column) - default to balanced
         self._create_slider_control(
             right_col, "Beat Sens",
             self._on_beat_sensitivity_change,
-            0.3, "Subtle", "Intense"  # 0.3 = 30% sensitivity
+            0.5, "Subtle", "Intense"  # 0.5 = 50% sensitivity
+        )
+        
+        # BPM Sync control (left column) - tempo percentage
+        self._create_slider_control(
+            left_col, "BPM Sync",
+            self._on_bpm_sync_change,
+            1.0, "25%", "200%"  # 1.0 = 100% of detected BPM
         )
         
         # Pattern selector
@@ -454,6 +461,9 @@ class AudioReactiveLightingGUI:
         elif label == "Beat Sens":
             self.beat_sensitivity_var = tk.DoubleVar(value=initial_value)
             var = self.beat_sensitivity_var
+        elif label == "BPM Sync":
+            self.bpm_sync_var = tk.DoubleVar(value=initial_value)
+            var = self.bpm_sync_var
         elif label == "Chaos":
             self.chaos_var = tk.DoubleVar(value=initial_value)
             var = self.chaos_var
@@ -579,6 +589,13 @@ class AudioReactiveLightingGUI:
         if self.dmx_controller:
             self.dmx_controller.set_beat_sensitivity(beat_sensitivity)
     
+    def _on_bpm_sync_change(self, value):
+        """Handle BPM sync slider change."""
+        # Map 0-1 slider to 0.25-2.0 (25% to 200%)
+        bpm_sync = 0.25 + float(value) * 1.75
+        if self.dmx_controller:
+            self.dmx_controller.set_bpm_sync(bpm_sync)
+    
     def _on_mood_match_toggle(self):
         """Handle mood match checkbox toggle."""
         enabled = self.mood_match_var.get()
@@ -672,11 +689,13 @@ class AudioReactiveLightingGUI:
             self.dmx_controller.reset()
         
         # Reset all UI elements to match defaults
-        self.smoothness_var.set(0.2)  # 0.2 = 80% smoothness (inverted)
-        self.rainbow_var.set(0.3)  # 30% rainbow
+        self.smoothness_var.set(0.5)  # 0.5 = 50% smoothness (inverted)
+        self.rainbow_var.set(0.5)  # 50% rainbow
         self.brightness_var.set(0.5)  # 50% brightness
         self.strobe_var.set(0.0)  # No strobe
-        self.beat_sensitivity_var.set(0.3)  # 30% beat sensitivity
+        self.beat_sensitivity_var.set(0.5)  # 50% beat sensitivity
+        if hasattr(self, 'bpm_sync_var'):
+            self.bpm_sync_var.set(1.0)  # 100% BPM sync
         
         # Reset Effects tab controls if they exist
         if hasattr(self, 'chaos_var'):
