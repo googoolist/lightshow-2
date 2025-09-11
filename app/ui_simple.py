@@ -37,6 +37,45 @@ class SimpleUI:
         main_frame = ttk.Frame(self.parent, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
+        # Status display at the TOP - more prominent
+        status_frame = ttk.Frame(main_frame)
+        status_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # Audio indicator (small colored circle)
+        self.status_indicator = tk.Canvas(status_frame, width=15, height=15)
+        self.status_indicator.pack(side=tk.LEFT, padx=(0, 5))
+        self.status_circle = self.status_indicator.create_oval(
+            2, 2, 13, 13, fill='gray', outline='black'
+        )
+        
+        # Audio status
+        self.audio_status = ttk.Label(
+            status_frame,
+            text="No Audio",
+            font=('Arial', 11)
+        )
+        self.audio_status.pack(side=tk.LEFT, padx=(0, 15))
+        
+        # BPM display
+        ttk.Label(status_frame, text="BPM:", font=('Arial', 11, 'bold')).pack(side=tk.LEFT)
+        self.bpm_label = ttk.Label(
+            status_frame,
+            text="--",
+            font=('Arial', 11, 'bold'),
+            foreground='blue'
+        )
+        self.bpm_label.pack(side=tk.LEFT, padx=(3, 15))
+        
+        # Level display
+        ttk.Label(status_frame, text="Level:", font=('Arial', 11, 'bold')).pack(side=tk.LEFT)
+        self.intensity_label = ttk.Label(
+            status_frame,
+            text="0%",
+            font=('Arial', 11, 'bold'),
+            foreground='green'
+        )
+        self.intensity_label.pack(side=tk.LEFT, padx=(3, 0))
+        
         # Program selector
         program_frame = ttk.LabelFrame(main_frame, text="Program", padding="10")
         program_frame.pack(fill=tk.X, pady=(0, 10))
@@ -73,37 +112,23 @@ class SimpleUI:
         controls_frame = ttk.LabelFrame(main_frame, text="Controls", padding="10")
         controls_frame.pack(fill=tk.X, pady=(0, 10))
         
-        # BPM Sync control (beat divisions)
+        # BPM Sync control (dropdown like Advanced mode)
         bpm_frame = ttk.Frame(controls_frame)
         bpm_frame.pack(fill=tk.X, pady=(0, 10))
         
         ttk.Label(bpm_frame, text="BPM Sync:", font=('Arial', 10, 'bold')).pack(anchor=tk.W)
         
-        # Custom scale widget for beat divisions
-        self.bpm_sync_var = tk.IntVar(value=4)  # Default to every beat (1x) at far right
-        
-        scale_frame = ttk.Frame(bpm_frame)
-        scale_frame.pack(fill=tk.X, pady=(5, 0))
-        
-        # Labels for divisions (reversed - slowest on left, fastest on right)
-        labels_frame = ttk.Frame(scale_frame)
-        labels_frame.pack(fill=tk.X)
-        
-        divisions = ["16x", "8x", "4x", "2x", "1x"]  # Reversed order
-        for i, label in enumerate(divisions):
-            lbl = ttk.Label(labels_frame, text=label, font=('Arial', 9))
-            lbl.place(relx=i/4, rely=0, anchor='n')
-        
-        # Scale widget
-        self.bpm_scale = ttk.Scale(
-            scale_frame,
-            from_=0,
-            to=4,
-            orient=tk.HORIZONTAL,
-            variable=self.bpm_sync_var,
-            command=self._on_bpm_sync_change
+        self.bpm_sync_var = tk.StringVar(value="Every beat")
+        self.bpm_sync_combo = ttk.Combobox(
+            bpm_frame,
+            textvariable=self.bpm_sync_var,
+            values=["Every beat", "Every 2 beats", "Every 4 beats", "Every 8 beats", "Every 16 beats"],
+            state="readonly",
+            width=15,
+            font=('Arial', 10)
         )
-        self.bpm_scale.pack(fill=tk.X, pady=(20, 0))
+        self.bpm_sync_combo.pack(fill=tk.X, pady=(2, 0))
+        self.bpm_sync_combo.bind("<<ComboboxSelected>>", self._on_bpm_sync_change)
         
         # Dimming control
         dim_frame = ttk.Frame(controls_frame)
@@ -189,74 +214,7 @@ class SimpleUI:
             foreground='gray'
         ).pack(side=tk.LEFT, padx=(10, 0))
         
-        # Status frame
-        status_frame = ttk.LabelFrame(main_frame, text="Status", padding="10")
-        status_frame.pack(fill=tk.X)
         
-        # Status display
-        status_text_frame = ttk.Frame(status_frame)
-        status_text_frame.pack(fill=tk.X)
-        
-        # Audio indicator (small colored circle)
-        self.status_indicator = tk.Canvas(status_text_frame, width=12, height=12)
-        self.status_indicator.pack(side=tk.LEFT, padx=(0, 5))
-        self.status_circle = self.status_indicator.create_oval(
-            2, 2, 10, 10, fill='gray', outline='black'
-        )
-        
-        # Audio status
-        self.audio_status = ttk.Label(
-            status_text_frame,
-            text="No Audio",
-            font=('Arial', 10)
-        )
-        self.audio_status.pack(side=tk.LEFT, padx=(0, 15))
-        
-        # BPM display
-        ttk.Label(status_text_frame, text="BPM:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT)
-        self.bpm_label = ttk.Label(
-            status_text_frame,
-            text="--",
-            font=('Arial', 10)
-        )
-        self.bpm_label.pack(side=tk.LEFT, padx=(2, 15))
-        
-        # Level display
-        ttk.Label(status_text_frame, text="Level:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT)
-        self.intensity_label = ttk.Label(
-            status_text_frame,
-            text="0%",
-            font=('Arial', 10)
-        )
-        self.intensity_label.pack(side=tk.LEFT, padx=(2, 15))
-        
-        # Beat division display
-        self.division_label = ttk.Label(
-            status_text_frame,
-            text="Sync: Every beat",
-            font=('Arial', 10)
-        )
-        self.division_label.pack(side=tk.LEFT)
-        
-        # Info text
-        info_frame = ttk.Frame(main_frame)
-        info_frame.pack(fill=tk.X, pady=(10, 0))
-        
-        info_text = (
-            "Simple Mode - Select a program and adjust controls.\n"
-            "BPM Sync: 1x = every beat, 2x = every 2nd beat, etc.\n"
-            "Dimming: Overall brightness control (0% = lights off)\n"
-            "New: Pulse/Spectrum/VU Meter react to volume & frequency!"
-        )
-        
-        self.info_label = ttk.Label(
-            info_frame,
-            text=info_text,
-            font=('Arial', 9),
-            foreground='gray',
-            justify=tk.LEFT
-        )
-        self.info_label.pack(anchor=tk.W)
         
     def _on_program_change(self, event=None):
         """Handle program selection change."""
@@ -264,22 +222,21 @@ class SimpleUI:
         if self.dmx_controller:
             self.dmx_controller.set_program(program)
             
-    def _on_bpm_sync_change(self, value):
-        """Handle BPM sync slider change."""
-        # Convert scale position to beat division (reversed - 0=16x, 4=1x)
-        divisions = [16, 8, 4, 2, 1]  # Reversed order
-        pos = int(float(value))
-        division = divisions[pos]
+    def _on_bpm_sync_change(self, event=None):
+        """Handle BPM sync dropdown change."""
+        selection = self.bpm_sync_var.get()
+        # Map selection to division value
+        division_map = {
+            "Every beat": 1,
+            "Every 2 beats": 2,
+            "Every 4 beats": 4,
+            "Every 8 beats": 8,
+            "Every 16 beats": 16
+        }
+        division = division_map.get(selection, 1)
         
         if self.dmx_controller:
             self.dmx_controller.set_bpm_division(division)
-            
-        # Update label
-        if division == 1:
-            text = "Sync: Every beat"
-        else:
-            text = f"Sync: Every {division} beats"
-        self.division_label.config(text=text)
         
     def _on_dimming_change(self, value):
         """Handle dimming slider change."""
