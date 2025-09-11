@@ -1,5 +1,5 @@
 """
-DMX lighting control module for managing PAR lights via OLA.
+Advanced DMX lighting control module for managing PAR lights via OLA.
 """
 
 import array
@@ -7,30 +7,22 @@ import threading
 import time
 import math
 import random
-from ola.ClientWrapper import ClientWrapper
+from lighting_base import BaseDmxController
 import config
 
 
-class DmxController:
+class DmxController(BaseDmxController):
     def __init__(self, audio_analyzer, beat_queue, stop_event):
         """
-        Initialize the DMX controller.
+        Initialize the advanced DMX controller.
         
         Args:
             audio_analyzer: Reference to audio analyzer for state access
             beat_queue: Queue for receiving beat events
             stop_event: Threading event to signal shutdown
         """
-        self.audio_analyzer = audio_analyzer
-        self.beat_queue = beat_queue
-        self.stop_event = stop_event
-        
-        # OLA client setup
-        self.wrapper = None
-        self.client = None
-        
-        # Light count configuration
-        self.active_lights = config.DEFAULT_LIGHT_COUNT
+        # Call parent class constructor
+        super().__init__(audio_analyzer, beat_queue, stop_event)
         
         # Lighting state (sized for max lights)
         self.current_color_index = 0
@@ -127,11 +119,6 @@ class DmxController:
                 # Inactive lights stay off
                 self.target_colors[i] = (0, 0, 0)
                 self.current_colors[i] = (0, 0, 0)
-    
-    def start(self):
-        """Start the DMX control thread."""
-        self.thread = threading.Thread(target=self._dmx_loop, daemon=True)
-        self.thread.start()
     
     def set_smoothness(self, value):
         """Set the smoothness level (0.0 = fast, 1.0 = very smooth)."""
@@ -342,58 +329,6 @@ class DmxController:
                 self._do_initialize_colors()
             finally:
                 self.control_lock.release()
-    
-    def _setup_ola(self):
-        """Initialize OLA client connection."""
-        try:
-            self.wrapper = ClientWrapper()
-            self.client = self.wrapper.Client()
-            print(f"OLA client connected successfully")
-            print(f"Sending DMX to universe {config.DMX_UNIVERSE}")
-            return True
-        except Exception as e:
-            print(f"Failed to connect to OLA: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-    
-    def _dmx_loop(self):
-        """Main DMX control loop running in separate thread."""
-        if not self._setup_ola():
-            print("DMX controller failed to initialize")
-            return
-        
-        # Schedule first DMX frame
-        self.wrapper.AddEvent(self.update_interval, self._send_dmx_frame)
-        
-        # Run OLA event loop (blocks until Stop() is called)
-        self.wrapper.Run()
-    
-    def _send_dmx_frame(self):
-        """Send a DMX frame and schedule the next one."""
-        if self.stop_event.is_set():
-            self.wrapper.Stop()
-            return
-        
-        # Compute and send frame
-        frame = self._compute_dmx_frame()
-        
-        # Debug: Show first few channels if any are non-zero
-        non_zero = [i for i, v in enumerate(frame) if v > 0]
-        if non_zero:
-            preview = list(frame[:24])  # Show first 24 channels
-            print(f"DMX Frame: {preview} (non-zero channels: {non_zero[:10]})")
-        
-        self.client.SendDmx(config.DMX_UNIVERSE, frame, self._dmx_callback)
-        
-        # Schedule next frame
-        self.wrapper.AddEvent(self.update_interval, self._send_dmx_frame)
-    
-    def _dmx_callback(self, status):
-        """Callback after DMX send."""
-        if not status.Succeeded():
-            print(f"DMX send failed: {status}")
-            print(f"Error details: {status.message if hasattr(status, 'message') else 'Unknown error'}")
     
     def _apply_frequency_colors(self, r, g, b, audio_state):
         """Map frequency content to colors."""
@@ -1032,25 +967,3 @@ class DmxController:
                     int(b_current + (b_target - b_current) * smooth_progress)
                 )
     
-    def stop(self):
-        """Stop the DMX control thread."""
-        self.stop_event.set()
-        
-        # Send all zeros to turn lights off before stopping
-        if self.client:
-            try:
-                off_frame = array.array('B', [0] * config.DMX_CHANNELS)
-                self.client.SendDmx(config.DMX_UNIVERSE, off_frame, lambda s: None)
-            except:
-                pass
-        
-        # Stop OLA wrapper if running
-        if self.wrapper:
-            try:
-                self.wrapper.Stop()
-            except:
-                pass
-        
-        # Wait for thread to finish
-        if hasattr(self, 'thread'):
-            self.thread.join(timeout=2.0)
