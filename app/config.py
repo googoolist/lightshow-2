@@ -20,7 +20,7 @@ BEAT_CONFIDENCE_THRESH = 0.2       # Confidence threshold for beat detection
 DMX_UNIVERSE = 1                   # OLA universe to send to
 DMX_CHANNELS = 56                  # Total channels to send (8 PARs * 7 channels each)
 UPDATE_FPS = 30                    # DMX update frequency
-DEFAULT_LIGHT_COUNT = 3            # Default number of active lights
+DEFAULT_LIGHT_COUNT = 4            # Default number of active lights
 MAX_LIGHTS = 8                     # Maximum supported lights
 
 # PAR light configuration - Up to 8 PAR lights with RGBW or similar channels

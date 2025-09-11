@@ -77,7 +77,9 @@ class BaseDmxController:
             return
             
         print(f"DMX controller started on universe {config.DMX_UNIVERSE}")
+        print(f"Active lights: {self.active_lights}")
         last_update = time.time()
+        frame_count = 0
         
         while not self.stop_event.is_set():
             try:
@@ -91,6 +93,17 @@ class BaseDmxController:
                     dmx_frame = self._compute_dmx_frame()
                     self._send_dmx(dmx_frame)
                     last_update = current_time
+                    frame_count += 1
+                    
+                    # Debug output every 30 frames (1 second at 30fps)
+                    if frame_count % 30 == 0:
+                        # Show first 4 lights' data (7 channels each)
+                        debug_data = []
+                        for i in range(min(4, self.active_lights)):
+                            start = i * 7
+                            end = start + 7
+                            debug_data.append(f"L{i+1}:{list(dmx_frame[start:end])}")
+                        print(f"DMX: {' '.join(debug_data)}")
                     
                 # Small sleep to prevent CPU spinning
                 time.sleep(0.001)
@@ -138,11 +151,8 @@ class BaseDmxController:
         base_channel = fixture['start_channel'] - 1
         channels = fixture['channels']
         
-        # Apply brightness
-        r = int(r * brightness)
-        g = int(g * brightness)
-        b = int(b * brightness)
-        
+        # For 7CH mode: Master dimmer controls overall brightness
+        # RGB channels are set to full color values
         # Set DMX values
         if 'dimmer' in channels:
             data[base_channel + channels['dimmer']] = int(brightness * 255)
@@ -153,6 +163,10 @@ class BaseDmxController:
             data[base_channel + channels['green']] = min(255, g)
         if 'blue' in channels:
             data[base_channel + channels['blue']] = min(255, b)
+            
+        # Set strobe to 0 (no strobe, we control effects)
+        if 'strobe' in channels:
+            data[base_channel + channels['strobe']] = 0
             
         # Set mode to manual control (0-9 range, using 0)
         if 'mode' in channels:
