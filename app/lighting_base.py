@@ -153,3 +153,11 @@ class BaseDmxController:
             data[base_channel + channels['green']] = min(255, g)
         if 'blue' in channels:
             data[base_channel + channels['blue']] = min(255, b)
+            
+        # Set mode to manual control (0-9 range, using 0)
+        if 'mode' in channels:
+            data[base_channel + channels['mode']] = 0
+            
+        # Set speed to 0 (we control timing)
+        if 'speed' in channels:
+            data[base_channel + channels['speed']] = 0

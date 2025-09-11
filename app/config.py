@@ -18,7 +18,7 @@ BEAT_CONFIDENCE_THRESH = 0.2       # Confidence threshold for beat detection
 
 # DMX/Lighting settings
 DMX_UNIVERSE = 1                   # OLA universe to send to
-DMX_CHANNELS = 64                  # Total channels to send (8 PARs * 8 channels max)
+DMX_CHANNELS = 56                  # Total channels to send (8 PARs * 7 channels each)
 UPDATE_FPS = 30                    # DMX update frequency
 DEFAULT_LIGHT_COUNT = 3            # Default number of active lights
 MAX_LIGHTS = 8                     # Maximum supported lights
@@ -30,104 +30,104 @@ LIGHT_FIXTURES = [
         "name": "PAR1",
         "start_channel": 1,
         "channels": {
-            "dimmer": 0,    # Channel offset from start_channel
-            "red": 1,
-            "green": 2,
-            "blue": 3,
-            "white": 4,     # If your PAR has white channel
-            "strobe": 5,    # If your PAR has strobe
-            "mode": 6,      # Mode/macro channel if available
+            "dimmer": 0,    # CH1: Master dimming
+            "red": 1,       # CH2: Red dimming
+            "green": 2,     # CH3: Green dimming
+            "blue": 3,      # CH4: Blue dimming
+            "strobe": 4,    # CH5: Strobe (0-10 off, 10-255 speed)
+            "mode": 5,      # CH6: Mode (0-9 for manual control)
+            "speed": 6,     # CH7: Speed (0 for our control)
         }
     },
     {
         "name": "PAR2", 
-        "start_channel": 9,
+        "start_channel": 8,
         "channels": {
             "dimmer": 0,
             "red": 1,
             "green": 2,
             "blue": 3,
-            "white": 4,
-            "strobe": 5,
-            "mode": 6,
+            "strobe": 4,
+            "mode": 5,
+            "speed": 6,
         }
     },
     {
         "name": "PAR3",
-        "start_channel": 17,
+        "start_channel": 15,
         "channels": {
             "dimmer": 0,
             "red": 1,
             "green": 2,
             "blue": 3,
-            "white": 4,
-            "strobe": 5,
-            "mode": 6,
+            "strobe": 4,
+            "mode": 5,
+            "speed": 6,
         }
     },
     {
         "name": "PAR4",
-        "start_channel": 25,
+        "start_channel": 22,
         "channels": {
             "dimmer": 0,
             "red": 1,
             "green": 2,
             "blue": 3,
-            "white": 4,
-            "strobe": 5,
-            "mode": 6,
+            "strobe": 4,
+            "mode": 5,
+            "speed": 6,
         }
     },
     {
         "name": "PAR5",
-        "start_channel": 33,
+        "start_channel": 29,
         "channels": {
             "dimmer": 0,
             "red": 1,
             "green": 2,
             "blue": 3,
-            "white": 4,
-            "strobe": 5,
-            "mode": 6,
+            "strobe": 4,
+            "mode": 5,
+            "speed": 6,
         }
     },
     {
         "name": "PAR6",
-        "start_channel": 41,
+        "start_channel": 36,
         "channels": {
             "dimmer": 0,
             "red": 1,
             "green": 2,
             "blue": 3,
-            "white": 4,
-            "strobe": 5,
-            "mode": 6,
+            "strobe": 4,
+            "mode": 5,
+            "speed": 6,
         }
     },
     {
         "name": "PAR7",
-        "start_channel": 49,
+        "start_channel": 43,
         "channels": {
             "dimmer": 0,
             "red": 1,
             "green": 2,
             "blue": 3,
-            "white": 4,
-            "strobe": 5,
-            "mode": 6,
+            "strobe": 4,
+            "mode": 5,
+            "speed": 6,
         }
     },
     {
         "name": "PAR8",
-        "start_channel": 57,
+        "start_channel": 50,
         "channels": {
             "dimmer": 0,
             "red": 1,
             "green": 2,
             "blue": 3,
-            "white": 4,
-            "strobe": 5,
-            "mode": 6,
+            "strobe": 4,
+            "mode": 5,
+            "speed": 6,
         }
     }
 ]

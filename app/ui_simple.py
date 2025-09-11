@@ -145,6 +145,50 @@ class SimpleUI:
         )
         self.cool_colors_check.pack(anchor=tk.W, pady=(5, 0))
         
+        # Light count control
+        lights_frame = ttk.LabelFrame(main_frame, text="Lights", padding="10")
+        lights_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # Light count controls in a horizontal layout
+        lights_control = ttk.Frame(lights_frame)
+        lights_control.pack(fill=tk.X)
+        
+        ttk.Label(lights_control, text="Active Lights:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Decrement button
+        ttk.Button(
+            lights_control,
+            text="-",
+            width=3,
+            command=self._decrement_lights
+        ).pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Light count display
+        self.light_count_var = tk.IntVar(value=config.DEFAULT_LIGHT_COUNT)
+        self.light_count_label = ttk.Label(
+            lights_control,
+            text=str(config.DEFAULT_LIGHT_COUNT),
+            font=('Arial', 11, 'bold'),
+            width=3
+        )
+        self.light_count_label.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Increment button
+        ttk.Button(
+            lights_control,
+            text="+",
+            width=3,
+            command=self._increment_lights
+        ).pack(side=tk.LEFT)
+        
+        # Range label
+        ttk.Label(
+            lights_control,
+            text=f"(1-{config.MAX_LIGHTS})",
+            font=('Arial', 9),
+            foreground='gray'
+        ).pack(side=tk.LEFT, padx=(10, 0))
+        
         # Status frame
         status_frame = ttk.LabelFrame(main_frame, text="Status", padding="10")
         status_frame.pack(fill=tk.X)
@@ -281,6 +325,28 @@ class SimpleUI:
             # Level/Intensity
             intensity_percent = int(state['intensity'] * 100)
             self.intensity_label.config(text=f"{intensity_percent}%")
+    
+    def _increment_lights(self):
+        """Increment the number of active lights."""
+        current = self.light_count_var.get()
+        if current < config.MAX_LIGHTS:
+            new_count = current + 1
+            self._update_light_count(new_count)
+    
+    def _decrement_lights(self):
+        """Decrement the number of active lights."""
+        current = self.light_count_var.get()
+        if current > 1:
+            new_count = current - 1
+            self._update_light_count(new_count)
+    
+    def _update_light_count(self, count):
+        """Update the light count and notify controller."""
+        self.light_count_var.set(count)
+        self.light_count_label.config(text=str(count))
+        
+        if self.dmx_controller:
+            self.dmx_controller.set_light_count(count)
                 
     def destroy(self):
         """Clean up the UI."""
