@@ -187,7 +187,7 @@ class AudioReactiveLightingGUI:
         self.pattern_combo = ttk.Combobox(
             pattern_frame,
             textvariable=self.pattern_var,
-            values=["Sync", "Wave", "Center", "Alternate", "Mirror"],
+            values=["Sync", "Wave", "Center", "Alternate", "Mirror", "Swell"],
             state="readonly",
             width=12,
             font=('Arial', 9)
@@ -349,6 +349,17 @@ class AudioReactiveLightingGUI:
             variable=self.genre_var,
             command=self._on_genre_toggle
         ).pack(side=tk.LEFT, padx=(10, 0))
+        
+        row3 = ttk.Frame(modes_frame)
+        row3.pack(fill=tk.X, pady=(4, 0))
+        
+        self.spectrum_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            row3,
+            text="Spectrum",
+            variable=self.spectrum_var,
+            command=self._on_spectrum_toggle
+        ).pack(side=tk.LEFT)
     
     def _create_advanced_tab(self):
         """Create the advanced status tab."""
@@ -619,6 +630,12 @@ class AudioReactiveLightingGUI:
         if self.dmx_controller:
             self.dmx_controller.set_genre_auto(enabled)
     
+    def _on_spectrum_toggle(self):
+        """Handle spectrum mode toggle."""
+        enabled = self.spectrum_var.get()
+        if self.dmx_controller:
+            self.dmx_controller.set_spectrum_mode(enabled)
+    
     def _on_pattern_change(self, event=None):
         """Handle pattern selection change."""
         pattern = self.pattern_var.get().lower()
@@ -677,6 +694,8 @@ class AudioReactiveLightingGUI:
         self.frequency_var.set(False)
         self.ambient_var.set(False)
         self.genre_var.set(False)
+        if hasattr(self, 'spectrum_var'):
+            self.spectrum_var.set(False)
         
         # Reset light count
         self.light_count_var.set(config.DEFAULT_LIGHT_COUNT)

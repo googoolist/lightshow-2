@@ -71,6 +71,8 @@ class DmxController:
         self.effect_phase = 0.0  # Phase for cyclic effects
         self.sparkle_positions = [0] * config.MAX_LIGHTS
         self.chase_position = 0
+        self.swell_phase = 0.0  # Phase for swell pattern
+        self.spectrum_mode = False  # Pure volume/frequency mode (no beat)
         
         # Chaos state
         self.chaos_colors = [(255,255,255)] * config.MAX_LIGHTS
@@ -252,14 +254,25 @@ class DmxController:
             finally:
                 self.control_lock.release()
     
+    def set_spectrum_mode(self, enabled):
+        """Enable/disable spectrum mode (pure volume/frequency response, no beat)."""
+        if self.control_lock.acquire(timeout=0.01):
+            try:
+                self.spectrum_mode = bool(enabled)
+            finally:
+                self.control_lock.release()
+    
     def set_pattern(self, pattern_name):
-        """Set the lighting pattern (sync, wave, center, alternate, mirror)."""
-        valid_patterns = ["sync", "wave", "center", "alternate", "mirror"]
+        """Set the lighting pattern (sync, wave, center, alternate, mirror, swell)."""
+        valid_patterns = ["sync", "wave", "center", "alternate", "mirror", "swell"]
         if pattern_name in valid_patterns:
             # Try to acquire lock with timeout to prevent deadlock
             if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
                 try:
                     self.pattern = pattern_name
+                    if pattern_name == 'swell':
+                        # Initialize swell phase
+                        self.swell_phase = 0.0
                 finally:
                     self.control_lock.release()
     
@@ -300,11 +313,13 @@ class DmxController:
                 self.chaos_level = 0.0
                 self.ambient_mode = False
                 self.genre_auto = False
+                self.spectrum_mode = False
                 self.active_lights = config.DEFAULT_LIGHT_COUNT
                 
                 # Clear buffers
                 self.echo_buffer.clear()
                 self.effect_phase = 0.0
+                self.swell_phase = 0.0
                 
                 # Reinitialize colors
                 self._do_initialize_colors()
@@ -377,6 +392,30 @@ class DmxController:
         r = int(r * 0.3 + bass * 255 * 0.7)
         g = int(g * 0.3 + mid * 255 * 0.7)
         b = int(b * 0.3 + high * 255 * 0.7)
+        
+        return min(255, r), min(255, g), min(255, b)
+    
+    def _apply_spectrum_colors(self, audio_state):
+        """Generate colors purely from frequency spectrum (spectrum mode)."""
+        bass = audio_state.get('bass', 0)
+        mid = audio_state.get('mid', 0)
+        high = audio_state.get('high', 0)
+        
+        # Map frequencies directly to RGB
+        # Bass drives warm colors (red/orange)
+        # Mid drives green/yellow
+        # High drives blue/purple
+        
+        # Create a color based on frequency balance
+        r = int(255 * (bass * 0.8 + mid * 0.2))
+        g = int(255 * (mid * 0.7 + bass * 0.2 + high * 0.1))
+        b = int(255 * (high * 0.8 + mid * 0.2))
+        
+        # Ensure minimum brightness
+        if r + g + b < 100:
+            r = max(40, r)
+            g = max(40, g)
+            b = max(40, b)
         
         return min(255, r), min(255, g), min(255, b)
     
@@ -557,7 +596,11 @@ class DmxController:
             r, g, b = self._apply_pattern(i, current_time)
             
             # Layer 2: Frequency-based colors
-            r, g, b = self._apply_frequency_colors(r, g, b, audio_state)
+            if self.spectrum_mode:
+                # In spectrum mode, colors are purely frequency-driven
+                r, g, b = self._apply_spectrum_colors(audio_state)
+            else:
+                r, g, b = self._apply_frequency_colors(r, g, b, audio_state)
             
             # Layer 3: Mood matching (temperature adjustment)
             if self.mood_match:
@@ -569,42 +612,72 @@ class DmxController:
             # Layer 5: Chaos randomization
             r, g, b = self._apply_chaos(r, g, b, i, beat_occurred)
             
-            # Calculate brightness with beat response (controlled by beat_sensitivity)
-            beat_boost = 0
-            if beat_occurred:
-                time_since_beat = current_time - self.last_beat_time
+            # Calculate brightness based on mode
+            if self.spectrum_mode:
+                # Spectrum mode: pure volume/frequency response, no beat
+                # Use frequency bands for brightness modulation
+                bass = audio_state.get('bass', 0)
+                mid = audio_state.get('mid', 0)
+                high = audio_state.get('high', 0)
                 
-                # Beat flash duration based on smoothness and sensitivity
-                base_duration = settings['beat_flash_duration']
-                if self.smoothness < 0.5:
-                    # Fast: 0.1 to 0.3 seconds
-                    beat_duration = base_duration * (0.2 + self.smoothness * 1.6)
-                else:
-                    # Slow: 0.3 to 2.0 seconds  
-                    beat_duration = base_duration * (1.0 + (self.smoothness - 0.5) * 6.0)
+                # Weight the frequencies for overall brightness
+                freq_brightness = (bass * 0.5 + mid * 0.3 + high * 0.2)
+                brightness = min(1.0, freq_brightness * settings['brightness_base'])
+                beat_boost = 0
                 
-                # Extend duration based on beat sensitivity
-                beat_duration *= (0.5 + self.beat_sensitivity * 1.5)  # 0.5x to 2x duration
+            elif self.pattern == "swell":
+                # Swell pattern: synchronized undulation
+                # Update swell phase
+                swell_speed = 0.1 + (1.0 - self.smoothness) * 0.5  # 0.1 to 0.6 Hz
+                self.swell_phase += swell_speed * (1.0 / config.UPDATE_FPS)
                 
-                if time_since_beat < beat_duration:
-                    # Beat response intensity controlled by beat_sensitivity
-                    # Sensitivity ranges from 0.05 (5% boost) to 0.8 (80% boost)
-                    base_response = 0.05 + (self.beat_sensitivity * 0.75)
+                # Create slow, deep undulation
+                swell_factor = (math.sin(self.swell_phase * 2 * 3.14159) + 1.0) / 2.0
+                
+                # Combine with intensity for reactive undulation
+                base_brightness = 0.2 + intensity * 0.5  # 20% to 70% base
+                swell_brightness = base_brightness + swell_factor * 0.3  # Add 0-30% swell
+                
+                brightness = min(1.0, swell_brightness * settings['brightness_base'])
+                beat_boost = 0
+                
+            else:
+                # Normal beat-based brightness
+                beat_boost = 0
+                if beat_occurred and not self.spectrum_mode:
+                    time_since_beat = current_time - self.last_beat_time
                     
-                    # Modulate by smoothness
+                    # Beat flash duration based on smoothness and sensitivity
+                    base_duration = settings['beat_flash_duration']
                     if self.smoothness < 0.5:
-                        # Fast mode: stronger response
-                        beat_response = base_response * (1.0 - self.smoothness * 0.3)
+                        # Fast: 0.1 to 0.3 seconds
+                        beat_duration = base_duration * (0.2 + self.smoothness * 1.6)
                     else:
-                        # Smooth mode: gentler response  
-                        beat_response = base_response * (0.7 - (self.smoothness - 0.5) * 0.4)
+                        # Slow: 0.3 to 2.0 seconds  
+                        beat_duration = base_duration * (1.0 + (self.smoothness - 0.5) * 6.0)
                     
-                    beat_boost = beat_response * (1 - time_since_beat / beat_duration)
-            
-            # Apply master brightness control with beat sensitivity boost
-            # Intensity response is also affected by beat_sensitivity
-            intensity_multiplier = 0.5 + (self.beat_sensitivity * 1.0)  # 0.5x to 1.5x intensity
-            brightness = min(1.0, intensity * intensity_multiplier * settings['brightness_base'] + beat_boost)
+                    # Extend duration based on beat sensitivity
+                    beat_duration *= (0.5 + self.beat_sensitivity * 1.5)  # 0.5x to 2x duration
+                    
+                    if time_since_beat < beat_duration:
+                        # Beat response intensity controlled by beat_sensitivity
+                        # Sensitivity ranges from 0.05 (5% boost) to 0.8 (80% boost)
+                        base_response = 0.05 + (self.beat_sensitivity * 0.75)
+                        
+                        # Modulate by smoothness
+                        if self.smoothness < 0.5:
+                            # Fast mode: stronger response
+                            beat_response = base_response * (1.0 - self.smoothness * 0.3)
+                        else:
+                            # Smooth mode: gentler response  
+                            beat_response = base_response * (0.7 - (self.smoothness - 0.5) * 0.4)
+                        
+                        beat_boost = beat_response * (1 - time_since_beat / beat_duration)
+                
+                # Apply master brightness control with beat sensitivity boost
+                # Intensity response is also affected by beat_sensitivity
+                intensity_multiplier = 0.5 + (self.beat_sensitivity * 1.0)  # 0.5x to 1.5x intensity
+                brightness = min(1.0, intensity * intensity_multiplier * settings['brightness_base'] + beat_boost)
             
             # Expanded brightness range with minimum floor:
             # 0.0 = 5% brightness (very dim but still visible)
@@ -775,6 +848,12 @@ class DmxController:
                 mirror_idx = self.active_lights - 1 - light_index
                 return self.current_colors[mirror_idx]
                 
+        elif self.pattern == "swell":
+            # Synchronized undulation - all lights move together
+            # This will be handled differently in brightness calculation
+            # For now, return the same color for all lights with smooth transitions
+            return self.current_colors[light_index]
+                
         else:
             # Default to sync
             return self.current_colors[light_index]
@@ -785,8 +864,16 @@ class DmxController:
             try:
                 current_time = time.time()
                 
-                # Much slower color transitions for smoother experience
-                if self.rainbow_level < 0.2:
+                # Special timing for swell pattern - ultra slow changes
+                if self.pattern == "swell":
+                    change_interval = 15.0 + self.smoothness * 30.0  # 15-45 seconds
+                    change_on_beat = False  # No beat triggers for swell
+                # Spectrum mode - frequency-driven changes
+                elif self.spectrum_mode:
+                    change_interval = 8.0 + self.smoothness * 12.0  # 8-20 seconds
+                    change_on_beat = False  # No beat triggers in spectrum mode
+                # Normal color transitions
+                elif self.rainbow_level < 0.2:
                     # Single color mode - very slow changes
                     change_interval = 10.0 + self.smoothness * 20.0  # 10-30 seconds
                     change_on_beat = False
@@ -817,56 +904,81 @@ class DmxController:
     
     def _select_new_colors(self):
         """Select new target colors based on rainbow level."""
-        # Use selected color theme
-        palette = config.COLOR_THEMES.get(self.color_theme, config.SMOOTH_COLOR_PALETTE)
-        palette_size = len(palette)
-        
-        if self.rainbow_level < 0.2:
-            # Single color mode - all lights same color
-            # Move to next color in palette
-            current_idx = 0
-            for color in palette:
-                if color == self.target_colors[0]:
-                    current_idx = palette.index(color)
-                    break
-            next_idx = (current_idx + 1) % palette_size
-            new_color = palette[next_idx]
+        try:
+            # Use selected color theme
+            palette = config.COLOR_THEMES.get(self.color_theme, config.SMOOTH_COLOR_PALETTE)
+            palette_size = len(palette)
             
-            for i in range(self.active_lights):
-                self.target_colors[i] = new_color
-                self.color_fade_progress[i] = 0.0
+            # Ensure palette has at least one color
+            if palette_size == 0:
+                palette = [(255, 0, 0)]  # Default to red
+                palette_size = 1
+            
+            if self.rainbow_level < 0.2:
+                # Single color mode - all lights same color
+                # Move to next color in palette
+                current_idx = 0
+                for color in palette:
+                    if color == self.target_colors[0]:
+                        current_idx = palette.index(color)
+                        break
+                next_idx = (current_idx + 1) % palette_size
+                new_color = palette[next_idx]
                 
-        elif self.rainbow_level < 0.5:
-            # Moderate diversity - lights have related colors
-            base_idx = random.randint(0, palette_size - 1)
-            spread = int(palette_size * 0.3)  # Colors within 30% of palette
-            
-            for i in range(self.active_lights):
-                offset = i * spread // 3
-                idx = (base_idx + offset) % palette_size
-                self.target_colors[i] = palette[idx]
-                self.color_fade_progress[i] = 0.0
+                for i in range(self.active_lights):
+                    self.target_colors[i] = new_color
+                    self.color_fade_progress[i] = 0.0
+                    
+            elif self.rainbow_level < 0.5:
+                # Moderate diversity - lights have related colors
+                base_idx = random.randint(0, max(0, palette_size - 1))
+                spread = max(1, int(palette_size * 0.3))  # Colors within 30% of palette, minimum 1
                 
-        elif self.rainbow_level < 0.8:
-            # High diversity - lights have different colors
-            indices = []
-            spread = palette_size // 3
-            
-            for i in range(self.active_lights):
-                idx = (i * spread + random.randint(0, spread-1)) % palette_size
-                indices.append(idx)
-            
-            for i in range(self.active_lights):
-                self.target_colors[i] = palette[indices[i]]
-                self.color_fade_progress[i] = 0.0
+                for i in range(self.active_lights):
+                    offset = i * spread // max(1, self.active_lights)
+                    idx = (base_idx + offset) % palette_size
+                    self.target_colors[i] = palette[idx]
+                    self.color_fade_progress[i] = 0.0
+                    
+            elif self.rainbow_level < 0.8:
+                # High diversity - lights have different colors
+                indices = []
+                spread = max(1, palette_size // 3)  # Ensure spread is at least 1
                 
-        else:
-            # Full rainbow - maximum color diversity
-            # Each light gets a random color from different parts of palette
-            indices = random.sample(range(palette_size), min(3, palette_size))
-            
+                for i in range(self.active_lights):
+                    # Ensure we don't go negative in random.randint
+                    random_offset = random.randint(0, max(0, spread-1))
+                    idx = (i * spread + random_offset) % palette_size
+                    indices.append(idx)
+                
+                for i in range(self.active_lights):
+                    self.target_colors[i] = palette[indices[i]]
+                    self.color_fade_progress[i] = 0.0
+                    
+            else:
+                # Full rainbow - maximum color diversity
+                # Each light gets a random color from different parts of palette
+                # Ensure we have enough indices for all active lights
+                num_colors_needed = min(self.active_lights, palette_size)
+                if num_colors_needed <= palette_size:
+                    # We have enough colors in palette, sample unique colors
+                    indices = random.sample(range(palette_size), num_colors_needed)
+                else:
+                    # More lights than colors, will need to repeat some
+                    indices = list(range(palette_size))
+                    random.shuffle(indices)
+                
+                for i in range(self.active_lights):
+                    # Use modulo to handle case where we have more lights than indices
+                    idx = indices[i % len(indices)]
+                    self.target_colors[i] = palette[idx]
+                    self.color_fade_progress[i] = 0.0
+                    
+        except Exception as e:
+            # If any error occurs, just set all lights to a safe default
+            print(f"Error in _select_new_colors: {e}")
             for i in range(self.active_lights):
-                self.target_colors[i] = palette[indices[i]]
+                self.target_colors[i] = (255, 0, 0)  # Default to red
                 self.color_fade_progress[i] = 0.0
     
     def _update_color_fades(self):
