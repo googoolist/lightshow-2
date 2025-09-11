@@ -137,6 +137,27 @@ class AudioReactiveLightingGUI:
             0.0, "Off", "Max"
         )
         
+        # Beat Sensitivity control (right column) - default to midpoint
+        self._create_slider_control(
+            right_col, "Beat Sens",
+            self._on_beat_sensitivity_change,
+            0.5, "Subtle", "Intense"  # Midpoint default for balanced reactivity
+        )
+        
+        # Mood Match toggle (right column)
+        mood_frame = ttk.Frame(right_col)
+        mood_frame.pack(fill=tk.X, pady=(0, 8))
+        
+        self.mood_match_var = tk.BooleanVar(value=False)
+        self.mood_match_check = ttk.Checkbutton(
+            mood_frame,
+            text="Mood Match",
+            variable=self.mood_match_var,
+            command=self._on_mood_match_toggle
+        )
+        self.mood_match_check.pack(anchor=tk.W)
+        ttk.Label(mood_frame, text="Cool→Warm by intensity", font=('Arial', 8), foreground='gray').pack(anchor=tk.W, padx=(20, 0))
+        
         # Pattern selector (right column)
         pattern_frame = ttk.Frame(right_col)
         pattern_frame.pack(fill=tk.X, pady=(0, 8))
@@ -320,6 +341,18 @@ class AudioReactiveLightingGUI:
         strobe_level = float(value)
         if self.dmx_controller:
             self.dmx_controller.set_strobe_level(strobe_level)
+    
+    def _on_beat_sensitivity_change(self, value):
+        """Handle beat sensitivity slider change."""
+        beat_sensitivity = float(value)
+        if self.dmx_controller:
+            self.dmx_controller.set_beat_sensitivity(beat_sensitivity)
+    
+    def _on_mood_match_toggle(self):
+        """Handle mood match checkbox toggle."""
+        enabled = self.mood_match_var.get()
+        if self.dmx_controller:
+            self.dmx_controller.set_mood_match(enabled)
     
     def _on_pattern_change(self, event=None):
         """Handle pattern selection change."""

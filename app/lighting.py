@@ -48,6 +48,8 @@ class DmxController:
         self.rainbow_level = 0.5  # Default midpoint (0.0 = single color, 1.0 = full rainbow)
         self.brightness_control = 0.5  # Default midpoint (0.0 = dim, 1.0 = full)
         self.strobe_level = 0.0  # Default off (0.0 = off, 1.0 = max)
+        self.beat_sensitivity = 0.5  # Default midpoint (0.0 = subtle, 1.0 = intense)
+        self.mood_match = False  # Default off - intensity-based color temperature
         self.pattern = "sync"  # Default to sync pattern
         self.control_lock = threading.Lock()
         
@@ -59,23 +61,26 @@ class DmxController:
         
     def _initialize_colors(self):
         """Initialize starting colors based on rainbow level."""
-        with self.control_lock:
-            palette = config.SMOOTH_COLOR_PALETTE
-            
-            if self.rainbow_level < 0.2:
-                # Single color mode - all lights same color
-                color = palette[0]
-                for i in range(self.active_lights):
-                    self.target_colors[i] = color
-                    self.current_colors[i] = color
-            else:
-                # Diverse colors - spread across palette
-                palette_size = len(palette)
-                spread = int(palette_size * self.rainbow_level / max(3, self.active_lights))
-                for i in range(self.active_lights):
-                    idx = (i * spread) % palette_size
-                    self.target_colors[i] = palette[idx]
-                    self.current_colors[i] = self.target_colors[i]
+        if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
+            try:
+                palette = config.SMOOTH_COLOR_PALETTE
+                
+                if self.rainbow_level < 0.2:
+                    # Single color mode - all lights same color
+                    color = palette[0]
+                    for i in range(self.active_lights):
+                        self.target_colors[i] = color
+                        self.current_colors[i] = color
+                else:
+                    # Diverse colors - spread across palette
+                    palette_size = len(palette)
+                    spread = int(palette_size * self.rainbow_level / max(3, self.active_lights))
+                    for i in range(self.active_lights):
+                        idx = (i * spread) % palette_size
+                        self.target_colors[i] = palette[idx]
+                        self.current_colors[i] = self.target_colors[i]
+            finally:
+                self.control_lock.release()
     
     def start(self):
         """Start the DMX control thread."""
@@ -84,46 +89,81 @@ class DmxController:
     
     def set_smoothness(self, value):
         """Set the smoothness level (0.0 = fast, 1.0 = very smooth)."""
-        with self.control_lock:
-            self.smoothness = max(0.0, min(1.0, value))
-            # Remove print to avoid I/O blocking while holding lock
+        # Try to acquire lock with timeout to prevent deadlock
+        if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
+            try:
+                self.smoothness = max(0.0, min(1.0, value))
+            finally:
+                self.control_lock.release()
     
     def set_rainbow_level(self, value):
         """Set the rainbow diversity level (0.0 = single color, 1.0 = full rainbow)."""
-        with self.control_lock:
-            self.rainbow_level = max(0.0, min(1.0, value))
-            # Remove print to avoid I/O blocking while holding lock
+        # Try to acquire lock with timeout to prevent deadlock
+        if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
+            try:
+                self.rainbow_level = max(0.0, min(1.0, value))
+            finally:
+                self.control_lock.release()
     
     def set_brightness(self, value):
         """Set the master brightness level (0.0 = dim, 1.0 = full brightness)."""
-        with self.control_lock:
-            self.brightness_control = max(0.0, min(1.0, value))
-            # Remove print to avoid I/O blocking while holding lock
+        # Try to acquire lock with timeout to prevent deadlock
+        if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
+            try:
+                self.brightness_control = max(0.0, min(1.0, value))
+            finally:
+                self.control_lock.release()
     
     def set_strobe_level(self, value):
         """Set the strobe intensity (0.0 = off, 1.0 = max)."""
-        with self.control_lock:
-            self.strobe_level = max(0.0, min(1.0, value))
-            # Remove print to avoid I/O blocking while holding lock
+        # Try to acquire lock with timeout to prevent deadlock
+        if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
+            try:
+                self.strobe_level = max(0.0, min(1.0, value))
+            finally:
+                self.control_lock.release()
+    
+    def set_beat_sensitivity(self, value):
+        """Set the beat sensitivity (0.0 = subtle, 1.0 = intense reactions)."""
+        # Try to acquire lock with timeout to prevent deadlock
+        if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
+            try:
+                self.beat_sensitivity = max(0.0, min(1.0, value))
+            finally:
+                self.control_lock.release()
+    
+    def set_mood_match(self, enabled):
+        """Enable/disable mood matching (cool colors for low intensity, warm for high)."""
+        # Try to acquire lock with timeout to prevent deadlock
+        if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
+            try:
+                self.mood_match = bool(enabled)
+            finally:
+                self.control_lock.release()
     
     def set_pattern(self, pattern_name):
         """Set the lighting pattern (sync, wave, center, alternate, mirror)."""
         valid_patterns = ["sync", "wave", "center", "alternate", "mirror"]
         if pattern_name in valid_patterns:
-            with self.control_lock:
-                self.pattern = pattern_name
-                # Remove print to avoid I/O blocking while holding lock
+            # Try to acquire lock with timeout to prevent deadlock
+            if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
+                try:
+                    self.pattern = pattern_name
+                finally:
+                    self.control_lock.release()
     
     def set_light_count(self, count):
         """Set the number of active lights."""
         new_count = max(1, min(count, config.MAX_LIGHTS))
-        with self.control_lock:
-            if self.active_lights != new_count:
-                self.active_lights = new_count
-                # Remove print to avoid I/O blocking while holding lock
-                needs_reinit = True
-            else:
-                needs_reinit = False
+        needs_reinit = False
+        # Try to acquire lock with timeout to prevent deadlock
+        if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
+            try:
+                if self.active_lights != new_count:
+                    self.active_lights = new_count
+                    needs_reinit = True
+            finally:
+                self.control_lock.release()
         
         # Reinitialize colors outside the lock if count changed
         if needs_reinit:
@@ -219,31 +259,46 @@ class DmxController:
             # Apply pattern-based color selection
             r, g, b = self._apply_pattern(i, current_time)
             
-            # Calculate brightness with beat response (expanded range)
+            # Apply mood matching if enabled (cool for low intensity, warm for high)
+            if self.mood_match:
+                r, g, b = self._apply_mood_adjustment(r, g, b, intensity)
+            
+            # Calculate brightness with beat response (controlled by beat_sensitivity)
             beat_boost = 0
             if beat_occurred:
                 time_since_beat = current_time - self.last_beat_time
                 
-                # Beat flash duration with expanded range
+                # Beat flash duration based on smoothness and sensitivity
+                base_duration = settings['beat_flash_duration']
                 if self.smoothness < 0.5:
                     # Fast: 0.1 to 0.3 seconds
-                    beat_duration = settings['beat_flash_duration'] * (0.2 + self.smoothness * 1.6)
+                    beat_duration = base_duration * (0.2 + self.smoothness * 1.6)
                 else:
                     # Slow: 0.3 to 2.0 seconds  
-                    beat_duration = settings['beat_flash_duration'] * (1.0 + (self.smoothness - 0.5) * 6.0)
+                    beat_duration = base_duration * (1.0 + (self.smoothness - 0.5) * 6.0)
+                
+                # Extend duration based on beat sensitivity
+                beat_duration *= (0.5 + self.beat_sensitivity * 1.5)  # 0.5x to 2x duration
                 
                 if time_since_beat < beat_duration:
-                    # Beat response intensity with expanded range
+                    # Beat response intensity controlled by beat_sensitivity
+                    # Sensitivity ranges from 0.05 (5% boost) to 0.8 (80% boost)
+                    base_response = 0.05 + (self.beat_sensitivity * 0.75)
+                    
+                    # Modulate by smoothness
                     if self.smoothness < 0.5:
-                        # Strong: 100% to 60% response
-                        beat_response = settings['beat_response'] * (1.0 - self.smoothness * 0.8)
+                        # Fast mode: stronger response
+                        beat_response = base_response * (1.0 - self.smoothness * 0.3)
                     else:
-                        # Gentle: 60% to 10% response
-                        beat_response = settings['beat_response'] * (0.6 - (self.smoothness - 0.5) * 1.0)
+                        # Smooth mode: gentler response  
+                        beat_response = base_response * (0.7 - (self.smoothness - 0.5) * 0.4)
+                    
                     beat_boost = beat_response * (1 - time_since_beat / beat_duration)
             
-            # Apply master brightness control with expanded range
-            brightness = min(1.0, intensity * settings['brightness_base'] + beat_boost)
+            # Apply master brightness control with beat sensitivity boost
+            # Intensity response is also affected by beat_sensitivity
+            intensity_multiplier = 0.5 + (self.beat_sensitivity * 1.0)  # 0.5x to 1.5x intensity
+            brightness = min(1.0, intensity * intensity_multiplier * settings['brightness_base'] + beat_boost)
             
             # Expanded brightness range with minimum floor:
             # 0.0 = 5% brightness (very dim but still visible)
@@ -291,16 +346,45 @@ class DmxController:
                     blue_value = max(1, blue_value)  # Minimum of 1 when not zero
                 data[base_channel + channels['blue']] = min(255, blue_value)
             
-            # Apply strobe effect on strong beats
+            # Apply strobe effect on strong beats (enhanced by beat sensitivity)
             if 'strobe' in channels and self.strobe_level > 0:
-                if beat_occurred and intensity > (1.0 - self.strobe_level * 0.5):
-                    # Strobe intensity based on slider (0-255)
-                    strobe_value = min(255, int(self.strobe_level * 255))
+                # Lower threshold with higher beat sensitivity for more frequent strobes
+                strobe_threshold = 1.0 - (self.strobe_level * 0.5) - (self.beat_sensitivity * 0.3)
+                if beat_occurred and intensity > max(0.2, strobe_threshold):
+                    # Strobe intensity based on slider and beat sensitivity
+                    strobe_value = min(255, int(self.strobe_level * 255 * (0.5 + self.beat_sensitivity * 0.5)))
                     data[base_channel + channels['strobe']] = strobe_value
                 else:
                     data[base_channel + channels['strobe']] = 0
         
         return data
+    
+    def _apply_mood_adjustment(self, r, g, b, intensity):
+        """Adjust color temperature based on intensity (cool for low, warm for high)."""
+        # Intensity ranges from 0.0 to 1.0
+        # Low intensity (0.0-0.3) = cool colors (more blue)
+        # Mid intensity (0.3-0.7) = neutral
+        # High intensity (0.7-1.0) = warm colors (more red/orange)
+        
+        if intensity < 0.3:
+            # Cool mood - enhance blues, reduce reds
+            cool_factor = 1.0 - (intensity / 0.3)  # 1.0 at silence, 0.0 at 0.3
+            r = int(r * (0.5 + 0.5 * (1.0 - cool_factor)))  # Reduce red 50% to 100%
+            g = int(g * (0.7 + 0.3 * (1.0 - cool_factor)))  # Reduce green 70% to 100%
+            b = min(255, int(b * (1.0 + cool_factor * 0.5)))  # Boost blue up to 150%
+        elif intensity > 0.7:
+            # Warm mood - enhance reds/oranges, reduce blues
+            warm_factor = (intensity - 0.7) / 0.3  # 0.0 at 0.7, 1.0 at 1.0
+            r = min(255, int(r * (1.0 + warm_factor * 0.5)))  # Boost red up to 150%
+            g = int(g * (0.8 + 0.2 * (1.0 - warm_factor * 0.5)))  # Slight orange tint
+            b = int(b * (0.5 + 0.5 * (1.0 - warm_factor)))  # Reduce blue 50% to 100%
+        
+        # Ensure values stay in valid range
+        r = max(0, min(255, r))
+        g = max(0, min(255, g))
+        b = max(0, min(255, b))
+        
+        return r, g, b
     
     def _apply_pattern(self, light_index, current_time):
         """Apply pattern-based color selection for each light."""
@@ -372,8 +456,9 @@ class DmxController:
     
     def _update_colors(self, beat_occurred, intensity):
         """Update color transitions based on rainbow level and beats."""
-        with self.control_lock:
-            current_time = time.time()
+        if self.control_lock.acquire(timeout=0.01):  # 10ms timeout
+            try:
+                current_time = time.time()
             
             # Determine color change frequency with expanded smoothness range
             if self.rainbow_level < 0.2:
@@ -414,6 +499,8 @@ class DmxController:
             
             # Update fade progress for smooth transitions
             self._update_color_fades()
+            finally:
+                self.control_lock.release()
     
     def _select_new_colors(self):
         """Select new target colors based on rainbow level."""
