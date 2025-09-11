@@ -72,6 +72,7 @@ class BaseDmxController:
             
     def _dmx_loop(self):
         """Main DMX control loop running in separate thread."""
+        print("Starting DMX loop...")
         if not self._setup_ola():
             print("DMX control disabled - OLA not available")
             return
@@ -81,6 +82,7 @@ class BaseDmxController:
         last_update = time.time()
         frame_count = 0
         
+        print("Entering main DMX loop...")
         while not self.stop_event.is_set():
             try:
                 current_time = time.time()
@@ -91,16 +93,21 @@ class BaseDmxController:
                 # Compute frame at target FPS
                 if (current_time - last_update) * 1000 >= self.update_interval:
                     dmx_frame = self._compute_dmx_frame()
+                    
+                    # Debug on first frame and then periodically
+                    if frame_count == 0:
+                        print(f"First DMX frame computed, length: {len(dmx_frame)}")
+                        if self.active_lights > 0 and len(dmx_frame) >= 7:
+                            sample = list(dmx_frame[0:7])
+                            print(f"First frame L1: Dim={sample[0]}, R={sample[1]}, G={sample[2]}, B={sample[3]}")
+                    
                     self._send_dmx(dmx_frame)
                     last_update = current_time
                     frame_count += 1
                     
-                    # Debug output every 150 frames (5 seconds at 30fps) - less verbose
-                    if frame_count % 150 == 0:
-                        # Show first light's data as a sample
-                        if self.active_lights > 0:
-                            sample = list(dmx_frame[0:7])
-                            print(f"DMX sample L1: Dim={sample[0]}, R={sample[1]}, G={sample[2]}, B={sample[3]}")
+                    # Debug output every 30 frames (1 second at 30fps) for now
+                    if frame_count % 30 == 0:
+                        print(f"DMX frames sent: {frame_count}")
                     
                 # Small sleep to prevent CPU spinning
                 time.sleep(0.001)
@@ -132,7 +139,7 @@ class BaseDmxController:
         """Send DMX data to OLA."""
         if self.ola_client:
             self.ola_client.SendDmx(config.DMX_UNIVERSE, data, self._dmx_sent)
-            self.wrapper.Run()
+            self.wrapper.RunOnce()  # Use RunOnce instead of Run to avoid blocking
             
     def _dmx_sent(self, status):
         """Callback for DMX send completion."""
