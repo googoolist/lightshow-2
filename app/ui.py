@@ -58,47 +58,71 @@ class AudioReactiveLightingGUI:
         self._schedule_update()
     
     def _create_widgets(self):
-        """Create all GUI widgets - ultra-compact design for 320x480 screen."""
+        """Create all GUI widgets with tabbed interface for 320x480 screen."""
         # Main container with minimal padding
-        main_frame = ttk.Frame(self.root, padding="5")
+        main_frame = ttk.Frame(self.root, padding="3")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # Top status bar (very compact)
         status_frame = ttk.Frame(main_frame)
-        status_frame.pack(fill=tk.X, pady=(0, 5))
+        status_frame.pack(fill=tk.X, pady=(0, 3))
         
         # Audio indicator
-        self.status_indicator = tk.Canvas(status_frame, width=15, height=15)
-        self.status_indicator.pack(side=tk.LEFT, padx=(0, 5))
+        self.status_indicator = tk.Canvas(status_frame, width=12, height=12)
+        self.status_indicator.pack(side=tk.LEFT, padx=(0, 3))
         self.status_circle = self.status_indicator.create_oval(
-            2, 2, 13, 13, fill='gray', outline='black'
+            2, 2, 10, 10, fill='gray', outline='black'
         )
         
-        # Status text
-        self.status_text = ttk.Label(status_frame, text="No Audio", font=('Arial', 9))
-        self.status_text.pack(side=tk.LEFT, padx=(0, 10))
+        # Status text (smaller font)
+        self.status_text = ttk.Label(status_frame, text="No Audio", font=('Arial', 8))
+        self.status_text.pack(side=tk.LEFT, padx=(0, 8))
         
         # BPM
-        ttk.Label(status_frame, text="BPM:", font=('Arial', 9, 'bold')).pack(side=tk.LEFT)
-        self.bpm_label = ttk.Label(status_frame, text="0", font=('Arial', 9))
-        self.bpm_label.pack(side=tk.LEFT, padx=(3, 10))
+        ttk.Label(status_frame, text="BPM:", font=('Arial', 8, 'bold')).pack(side=tk.LEFT)
+        self.bpm_label = ttk.Label(status_frame, text="0", font=('Arial', 8))
+        self.bpm_label.pack(side=tk.LEFT, padx=(2, 8))
         
         # Level
-        ttk.Label(status_frame, text="Level:", font=('Arial', 9, 'bold')).pack(side=tk.LEFT)
-        self.intensity_label = ttk.Label(status_frame, text="0%", font=('Arial', 9))
-        self.intensity_label.pack(side=tk.LEFT, padx=(3, 0))
+        ttk.Label(status_frame, text="Level:", font=('Arial', 8, 'bold')).pack(side=tk.LEFT)
+        self.intensity_label = ttk.Label(status_frame, text="0%", font=('Arial', 8))
+        self.intensity_label.pack(side=tk.LEFT, padx=(2, 0))
         
         # Quit button (right side)
         self.quit_button = ttk.Button(
             status_frame,
             text="X",
             command=self._on_quit,
-            width=3
+            width=2
         )
         self.quit_button.pack(side=tk.RIGHT)
         
-        # Create two-column layout for sliders
-        controls_container = ttk.Frame(main_frame)
+        # Create notebook for tabs
+        self.notebook = ttk.Notebook(main_frame)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+        
+        # Create tabs
+        self._create_main_tab()
+        self._create_effects_tab()
+        self._create_advanced_tab()
+        
+        
+        # Info label at bottom
+        self.info_label = ttk.Label(
+            main_frame,
+            text=f"{config.DEFAULT_LIGHT_COUNT} PAR • DMX 1",
+            font=('Arial', 8),
+            foreground='gray'
+        )
+        self.info_label.pack(side=tk.BOTTOM, pady=(2, 0))
+    
+    def _create_main_tab(self):
+        """Create the main controls tab."""
+        main_tab = ttk.Frame(self.notebook)
+        self.notebook.add(main_tab, text="Main")
+        
+        # Create two-column layout
+        controls_container = ttk.Frame(main_tab, padding="5")
         controls_container.pack(fill=tk.BOTH, expand=True)
         
         # Left column
@@ -109,25 +133,25 @@ class AudioReactiveLightingGUI:
         right_col = ttk.Frame(controls_container)
         right_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(3, 0))
         
-        # Speed control (left column) - default to midpoint
+        # Speed control (left column)
         self._create_slider_control(
             left_col, "Speed", 
             self._on_smoothness_change,
-            0.5, "Slow", "Fast"  # Midpoint default
+            0.5, "Slow", "Fast"
         )
         
-        # Rainbow control (left column) - default to midpoint
+        # Rainbow control (left column)
         self._create_slider_control(
             left_col, "Rainbow",
             self._on_rainbow_change,
-            0.5, "Single", "Full"  # Midpoint default
+            0.5, "Single", "Full"
         )
         
-        # Brightness control (left column) - default to midpoint
+        # Brightness control (left column)
         self._create_slider_control(
             left_col, "Brightness",
             self._on_brightness_change,
-            0.5, "Dim", "Bright"  # Midpoint default
+            0.5, "Dim", "Bright"
         )
         
         # Strobe control (right column)
@@ -137,114 +161,20 @@ class AudioReactiveLightingGUI:
             0.0, "Off", "Max"
         )
         
-        # Beat Sensitivity control (right column) - default to midpoint
+        # Beat Sensitivity control (right column)
         self._create_slider_control(
             right_col, "Beat Sens",
             self._on_beat_sensitivity_change,
-            0.5, "Subtle", "Intense"  # Midpoint default for balanced reactivity
+            0.5, "Subtle", "Intense"
         )
         
-        # Chaos Level slider (left column)
-        self._create_slider_control(
-            left_col, "Chaos",
-            self._on_chaos_change,
-            0.0, "None", "Wild"
-        )
-        
-        # Echo Length slider (left column) 
-        self._create_slider_control(
-            left_col, "Echo",
-            self._on_echo_length_change,
-            0.0, "Off", "Long"
-        )
-        
-        # Color Theme dropdown (right column)
-        theme_frame = ttk.Frame(right_col)
-        theme_frame.pack(fill=tk.X, pady=(0, 8))
-        
-        ttk.Label(theme_frame, text="Theme:", font=('Arial', 9, 'bold')).pack(anchor=tk.W)
-        
-        self.theme_var = tk.StringVar(value="Default")
-        self.theme_combo = ttk.Combobox(
-            theme_frame,
-            textvariable=self.theme_var,
-            values=["Default", "Sunset", "Ocean", "Fire", "Forest", "Galaxy", "Mono", "Warm", "Cool"],
-            state="readonly",
-            width=12,
-            font=('Arial', 9)
-        )
-        self.theme_combo.pack(fill=tk.X, pady=(2, 0))
-        self.theme_combo.bind("<<ComboboxSelected>>", self._on_theme_change)
-        
-        # Effect Mode dropdown (right column)
-        effect_frame = ttk.Frame(right_col)
-        effect_frame.pack(fill=tk.X, pady=(0, 8))
-        
-        ttk.Label(effect_frame, text="Effect:", font=('Arial', 9, 'bold')).pack(anchor=tk.W)
-        
-        self.effect_var = tk.StringVar(value="None")
-        self.effect_combo = ttk.Combobox(
-            effect_frame,
-            textvariable=self.effect_var,
-            values=["None", "Breathe", "Sparkle", "Chase", "Pulse", "Sweep", "Firefly"],
-            state="readonly",
-            width=12,
-            font=('Arial', 9)
-        )
-        self.effect_combo.pack(fill=tk.X, pady=(2, 0))
-        self.effect_combo.bind("<<ComboboxSelected>>", self._on_effect_change)
-        
-        # Mode toggles (right column) - compact checkboxes
-        modes_frame = ttk.Frame(right_col)
-        modes_frame.pack(fill=tk.X, pady=(0, 8))
-        
-        # Row 1 of checkboxes
-        row1 = ttk.Frame(modes_frame)
-        row1.pack(fill=tk.X)
-        
-        self.mood_match_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(
-            row1,
-            text="Mood",
-            variable=self.mood_match_var,
-            command=self._on_mood_match_toggle
-        ).pack(side=tk.LEFT)
-        
-        self.frequency_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(
-            row1,
-            text="Freq",
-            variable=self.frequency_var,
-            command=self._on_frequency_toggle
-        ).pack(side=tk.LEFT, padx=(10, 0))
-        
-        # Row 2 of checkboxes
-        row2 = ttk.Frame(modes_frame)
-        row2.pack(fill=tk.X, pady=(4, 0))
-        
-        self.ambient_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(
-            row2,
-            text="Ambient",
-            variable=self.ambient_var,
-            command=self._on_ambient_toggle
-        ).pack(side=tk.LEFT)
-        
-        self.genre_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(
-            row2,
-            text="Auto",
-            variable=self.genre_var,
-            command=self._on_genre_toggle
-        ).pack(side=tk.LEFT, padx=(10, 0))
-        
-        # Pattern selector (right column)
+        # Pattern selector
         pattern_frame = ttk.Frame(right_col)
         pattern_frame.pack(fill=tk.X, pady=(0, 8))
         
         ttk.Label(pattern_frame, text="Pattern:", font=('Arial', 9, 'bold')).pack(anchor=tk.W)
         
-        self.pattern_var = tk.StringVar(value="Sync")  # Default to Sync pattern
+        self.pattern_var = tk.StringVar(value="Sync")
         self.pattern_combo = ttk.Combobox(
             pattern_frame,
             textvariable=self.pattern_var,
@@ -256,8 +186,8 @@ class AudioReactiveLightingGUI:
         self.pattern_combo.pack(fill=tk.X, pady=(2, 0))
         self.pattern_combo.bind("<<ComboboxSelected>>", self._on_pattern_change)
         
-        # Light count control (right column)
-        lights_frame = ttk.Frame(right_col)
+        # Light count control
+        lights_frame = ttk.Frame(left_col)
         lights_frame.pack(fill=tk.X, pady=(0, 8))
         
         ttk.Label(lights_frame, text="Lights:", font=('Arial', 9, 'bold')).pack(anchor=tk.W)
@@ -300,15 +230,181 @@ class AudioReactiveLightingGUI:
             font=('Arial', 8),
             foreground='gray'
         ).pack(side=tk.LEFT, padx=(10, 0))
+    
+    def _create_effects_tab(self):
+        """Create the effects and modes tab."""
+        effects_tab = ttk.Frame(self.notebook)
+        self.notebook.add(effects_tab, text="Effects")
         
-        # Info label at bottom
-        self.info_label = ttk.Label(
-            main_frame,
-            text=f"{config.DEFAULT_LIGHT_COUNT} PAR • DMX 1",
-            font=('Arial', 8),
-            foreground='gray'
+        # Create two-column layout
+        controls_container = ttk.Frame(effects_tab, padding="5")
+        controls_container.pack(fill=tk.BOTH, expand=True)
+        
+        # Left column
+        left_col = ttk.Frame(controls_container)
+        left_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 3))
+        
+        # Right column
+        right_col = ttk.Frame(controls_container)
+        right_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(3, 0))
+        
+        # Chaos Level slider (left column)
+        self._create_slider_control(
+            left_col, "Chaos",
+            self._on_chaos_change,
+            0.0, "None", "Wild"
         )
-        self.info_label.pack(side=tk.BOTTOM, pady=(2, 0))
+        
+        # Echo Length slider (left column)
+        self._create_slider_control(
+            left_col, "Echo",
+            self._on_echo_length_change,
+            0.0, "Off", "Long"
+        )
+        
+        # Color Theme dropdown (left column)
+        theme_frame = ttk.Frame(left_col)
+        theme_frame.pack(fill=tk.X, pady=(0, 8))
+        
+        ttk.Label(theme_frame, text="Theme:", font=('Arial', 9, 'bold')).pack(anchor=tk.W)
+        
+        self.theme_var = tk.StringVar(value="Default")
+        self.theme_combo = ttk.Combobox(
+            theme_frame,
+            textvariable=self.theme_var,
+            values=["Default", "Sunset", "Ocean", "Fire", "Forest", "Galaxy", "Mono", "Warm", "Cool"],
+            state="readonly",
+            width=12,
+            font=('Arial', 9)
+        )
+        self.theme_combo.pack(fill=tk.X, pady=(2, 0))
+        self.theme_combo.bind("<<ComboboxSelected>>", self._on_theme_change)
+        
+        # Effect Mode dropdown (right column)
+        effect_frame = ttk.Frame(right_col)
+        effect_frame.pack(fill=tk.X, pady=(0, 8))
+        
+        ttk.Label(effect_frame, text="Effect:", font=('Arial', 9, 'bold')).pack(anchor=tk.W)
+        
+        self.effect_var = tk.StringVar(value="None")
+        self.effect_combo = ttk.Combobox(
+            effect_frame,
+            textvariable=self.effect_var,
+            values=["None", "Breathe", "Sparkle", "Chase", "Pulse", "Sweep", "Firefly"],
+            state="readonly",
+            width=12,
+            font=('Arial', 9)
+        )
+        self.effect_combo.pack(fill=tk.X, pady=(2, 0))
+        self.effect_combo.bind("<<ComboboxSelected>>", self._on_effect_change)
+        
+        # Mode toggles
+        modes_frame = ttk.LabelFrame(right_col, text="Modes", padding="5")
+        modes_frame.pack(fill=tk.X, pady=(0, 8))
+        
+        # Checkboxes in 2x2 grid
+        row1 = ttk.Frame(modes_frame)
+        row1.pack(fill=tk.X)
+        
+        self.mood_match_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            row1,
+            text="Mood Match",
+            variable=self.mood_match_var,
+            command=self._on_mood_match_toggle
+        ).pack(side=tk.LEFT)
+        
+        self.frequency_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            row1,
+            text="Frequency",
+            variable=self.frequency_var,
+            command=self._on_frequency_toggle
+        ).pack(side=tk.LEFT, padx=(10, 0))
+        
+        row2 = ttk.Frame(modes_frame)
+        row2.pack(fill=tk.X, pady=(4, 0))
+        
+        self.ambient_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            row2,
+            text="Ambient",
+            variable=self.ambient_var,
+            command=self._on_ambient_toggle
+        ).pack(side=tk.LEFT)
+        
+        self.genre_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            row2,
+            text="Auto Genre",
+            variable=self.genre_var,
+            command=self._on_genre_toggle
+        ).pack(side=tk.LEFT, padx=(10, 0))
+    
+    def _create_advanced_tab(self):
+        """Create the advanced status tab."""
+        advanced_tab = ttk.Frame(self.notebook)
+        self.notebook.add(advanced_tab, text="Status")
+        
+        # Create scrollable frame for status info
+        status_container = ttk.Frame(advanced_tab, padding="5")
+        status_container.pack(fill=tk.BOTH, expand=True)
+        
+        # Frequency levels display
+        freq_frame = ttk.LabelFrame(status_container, text="Frequency Analysis", padding="5")
+        freq_frame.pack(fill=tk.X, pady=(0, 8))
+        
+        # Bass level
+        bass_frame = ttk.Frame(freq_frame)
+        bass_frame.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(bass_frame, text="Bass:", width=8).pack(side=tk.LEFT)
+        self.bass_bar = ttk.Progressbar(bass_frame, length=150, mode='determinate')
+        self.bass_bar.pack(side=tk.LEFT, padx=(5, 0))
+        self.bass_label = ttk.Label(bass_frame, text="0%", width=5)
+        self.bass_label.pack(side=tk.LEFT, padx=(5, 0))
+        
+        # Mid level
+        mid_frame = ttk.Frame(freq_frame)
+        mid_frame.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(mid_frame, text="Mid:", width=8).pack(side=tk.LEFT)
+        self.mid_bar = ttk.Progressbar(mid_frame, length=150, mode='determinate')
+        self.mid_bar.pack(side=tk.LEFT, padx=(5, 0))
+        self.mid_label = ttk.Label(mid_frame, text="0%", width=5)
+        self.mid_label.pack(side=tk.LEFT, padx=(5, 0))
+        
+        # High level
+        high_frame = ttk.Frame(freq_frame)
+        high_frame.pack(fill=tk.X)
+        ttk.Label(high_frame, text="High:", width=8).pack(side=tk.LEFT)
+        self.high_bar = ttk.Progressbar(high_frame, length=150, mode='determinate')
+        self.high_bar.pack(side=tk.LEFT, padx=(5, 0))
+        self.high_label = ttk.Label(high_frame, text="0%", width=5)
+        self.high_label.pack(side=tk.LEFT, padx=(5, 0))
+        
+        # Genre detection display
+        genre_frame = ttk.LabelFrame(status_container, text="Genre Detection", padding="5")
+        genre_frame.pack(fill=tk.X, pady=(0, 8))
+        
+        self.genre_label = ttk.Label(genre_frame, text="Detecting...", font=('Arial', 10))
+        self.genre_label.pack()
+        
+        # Build/Drop detection
+        event_frame = ttk.LabelFrame(status_container, text="Event Detection", padding="5")
+        event_frame.pack(fill=tk.X, pady=(0, 8))
+        
+        self.event_label = ttk.Label(event_frame, text="Normal", font=('Arial', 10))
+        self.event_label.pack()
+        
+        # DMX info
+        dmx_frame = ttk.LabelFrame(status_container, text="DMX Info", padding="5")
+        dmx_frame.pack(fill=tk.X)
+        
+        self.dmx_info_label = ttk.Label(
+            dmx_frame,
+            text=f"Universe: {config.DMX_UNIVERSE}\nChannels: {config.DMX_CHANNELS}\nFPS: {config.UPDATE_FPS}",
+            font=('Arial', 9)
+        )
+        self.dmx_info_label.pack()
     
     def _create_slider_control(self, parent, label, command, initial_value, left_label, right_label):
         """Create a compact slider control with labels."""
@@ -335,6 +431,15 @@ class AudioReactiveLightingGUI:
         elif label == "Strobe":
             self.strobe_var = tk.DoubleVar(value=initial_value)
             var = self.strobe_var
+        elif label == "Beat Sens":
+            self.beat_sensitivity_var = tk.DoubleVar(value=initial_value)
+            var = self.beat_sensitivity_var
+        elif label == "Chaos":
+            self.chaos_var = tk.DoubleVar(value=initial_value)
+            var = self.chaos_var
+        elif label == "Echo":
+            self.echo_var = tk.DoubleVar(value=initial_value)
+            var = self.echo_var
         else:
             var = tk.DoubleVar(value=initial_value)
         
@@ -395,6 +500,32 @@ class AudioReactiveLightingGUI:
         else:
             self.status_indicator.itemconfig(self.status_circle, fill='gray')
             self.status_text.config(text="No Audio")
+        
+        # Update advanced tab if it exists
+        if hasattr(self, 'bass_bar'):
+            # Update frequency bars
+            bass_pct = int(state.get('bass', 0) * 100)
+            mid_pct = int(state.get('mid', 0) * 100)
+            high_pct = int(state.get('high', 0) * 100)
+            
+            self.bass_bar['value'] = bass_pct
+            self.bass_label.config(text=f"{bass_pct}%")
+            self.mid_bar['value'] = mid_pct
+            self.mid_label.config(text=f"{mid_pct}%")
+            self.high_bar['value'] = high_pct
+            self.high_label.config(text=f"{high_pct}%")
+            
+            # Update genre label
+            genre = state.get('genre', 'auto')
+            self.genre_label.config(text=genre.capitalize())
+            
+            # Update event label
+            if state.get('is_drop', False):
+                self.event_label.config(text="DROP!", foreground='red')
+            elif state.get('is_building', False):
+                self.event_label.config(text="Building...", foreground='orange')
+            else:
+                self.event_label.config(text="Normal", foreground='black')
     
     def _on_smoothness_change(self, value):
         """Handle speed slider change (inverted for smoothness)."""
