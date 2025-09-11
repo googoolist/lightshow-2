@@ -80,16 +80,16 @@ class SimpleUI:
         ttk.Label(bpm_frame, text="BPM Sync:", font=('Arial', 10, 'bold')).pack(anchor=tk.W)
         
         # Custom scale widget for beat divisions
-        self.bpm_sync_var = tk.IntVar(value=1)  # Default to every beat
+        self.bpm_sync_var = tk.IntVar(value=4)  # Default to every beat (1x) at far right
         
         scale_frame = ttk.Frame(bpm_frame)
         scale_frame.pack(fill=tk.X, pady=(5, 0))
         
-        # Labels for divisions
+        # Labels for divisions (reversed - slowest on left, fastest on right)
         labels_frame = ttk.Frame(scale_frame)
         labels_frame.pack(fill=tk.X)
         
-        divisions = ["1x", "2x", "4x", "8x", "16x"]
+        divisions = ["16x", "8x", "4x", "2x", "1x"]  # Reversed order
         for i, label in enumerate(divisions):
             lbl = ttk.Label(labels_frame, text=label, font=('Arial', 9))
             lbl.place(relx=i/4, rely=0, anchor='n')
@@ -153,21 +153,38 @@ class SimpleUI:
         status_text_frame = ttk.Frame(status_frame)
         status_text_frame.pack(fill=tk.X)
         
+        # Audio indicator (small colored circle)
+        self.status_indicator = tk.Canvas(status_text_frame, width=12, height=12)
+        self.status_indicator.pack(side=tk.LEFT, padx=(0, 5))
+        self.status_circle = self.status_indicator.create_oval(
+            2, 2, 10, 10, fill='gray', outline='black'
+        )
+        
         # Audio status
         self.audio_status = ttk.Label(
             status_text_frame,
-            text="Audio: Waiting...",
+            text="No Audio",
             font=('Arial', 10)
         )
-        self.audio_status.pack(side=tk.LEFT, padx=(0, 20))
+        self.audio_status.pack(side=tk.LEFT, padx=(0, 15))
         
         # BPM display
+        ttk.Label(status_text_frame, text="BPM:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT)
         self.bpm_label = ttk.Label(
             status_text_frame,
-            text="BPM: --",
-            font=('Arial', 10, 'bold')
+            text="--",
+            font=('Arial', 10)
         )
-        self.bpm_label.pack(side=tk.LEFT, padx=(0, 20))
+        self.bpm_label.pack(side=tk.LEFT, padx=(2, 15))
+        
+        # Level display
+        ttk.Label(status_text_frame, text="Level:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT)
+        self.intensity_label = ttk.Label(
+            status_text_frame,
+            text="0%",
+            font=('Arial', 10)
+        )
+        self.intensity_label.pack(side=tk.LEFT, padx=(2, 15))
         
         # Beat division display
         self.division_label = ttk.Label(
@@ -205,8 +222,8 @@ class SimpleUI:
             
     def _on_bpm_sync_change(self, value):
         """Handle BPM sync slider change."""
-        # Convert scale position to beat division
-        divisions = [1, 2, 4, 8, 16]
+        # Convert scale position to beat division (reversed - 0=16x, 4=1x)
+        divisions = [16, 8, 4, 2, 1]  # Reversed order
         pos = int(float(value))
         division = divisions[pos]
         
@@ -246,18 +263,24 @@ class SimpleUI:
         if self.audio_analyzer:
             state = self.audio_analyzer.get_state()
             
-            # Audio status
+            # Audio status indicator and text
             if state['audio_active']:
-                self.audio_status.config(text="Audio: Playing", foreground='green')
+                self.status_indicator.itemconfig(self.status_circle, fill='green')
+                self.audio_status.config(text="Playing")
             else:
-                self.audio_status.config(text="Audio: No Signal", foreground='gray')
+                self.status_indicator.itemconfig(self.status_circle, fill='gray')
+                self.audio_status.config(text="No Audio")
                 
             # BPM
             bpm = state['bpm']
             if bpm > 0:
-                self.bpm_label.config(text=f"BPM: {int(bpm)}")
+                self.bpm_label.config(text=f"{int(bpm)}")
             else:
-                self.bpm_label.config(text="BPM: --")
+                self.bpm_label.config(text="--")
+                
+            # Level/Intensity
+            intensity_percent = int(state['intensity'] * 100)
+            self.intensity_label.config(text=f"{intensity_percent}%")
                 
     def destroy(self):
         """Clean up the UI."""
