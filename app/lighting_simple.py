@@ -109,7 +109,7 @@ class SimpleDmxController(BaseDmxController):
         self.disco_states = [
             {
                 'color': random.choice(self._get_color_palette()),
-                'brightness': random.random(),
+                'brightness': 0.0,  # Start with lights off
                 'fade_speed': 0.01 + random.random() * 0.03,
                 'direction': random.choice([1, -1])
             }
@@ -172,7 +172,16 @@ class SimpleDmxController(BaseDmxController):
         
         # If audio is not active, return blackout frame
         if not audio_active:
+            # Debug: only print once per state change
+            if not hasattr(self, '_last_audio_state') or self._last_audio_state != audio_active:
+                print("SimpleDmxController: Audio inactive, sending blackout")
+                self._last_audio_state = audio_active
             return data
+        
+        # Debug: only print once per state change  
+        if not hasattr(self, '_last_audio_state') or self._last_audio_state != audio_active:
+            print("SimpleDmxController: Audio active, sending light patterns")
+            self._last_audio_state = audio_active
         
         # Select program method
         if self.program == "Bounce (Same Color)":
