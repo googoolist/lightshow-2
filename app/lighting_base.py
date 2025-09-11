@@ -95,15 +95,12 @@ class BaseDmxController:
                     last_update = current_time
                     frame_count += 1
                     
-                    # Debug output every 30 frames (1 second at 30fps)
-                    if frame_count % 30 == 0:
-                        # Show first 4 lights' data (7 channels each)
-                        debug_data = []
-                        for i in range(min(4, self.active_lights)):
-                            start = i * 7
-                            end = start + 7
-                            debug_data.append(f"L{i+1}:{list(dmx_frame[start:end])}")
-                        print(f"DMX: {' '.join(debug_data)}")
+                    # Debug output every 150 frames (5 seconds at 30fps) - less verbose
+                    if frame_count % 150 == 0:
+                        # Show first light's data as a sample
+                        if self.active_lights > 0:
+                            sample = list(dmx_frame[0:7])
+                            print(f"DMX sample L1: Dim={sample[0]}, R={sample[1]}, G={sample[2]}, B={sample[3]}")
                     
                 # Small sleep to prevent CPU spinning
                 time.sleep(0.001)
@@ -151,8 +148,13 @@ class BaseDmxController:
         base_channel = fixture['start_channel'] - 1
         channels = fixture['channels']
         
-        # For 7CH mode: Master dimmer controls overall brightness
-        # RGB channels are set to full color values
+        # For 7CH mode: Both master dimmer AND RGB channels control brightness
+        # RGB channels are "dimming" channels (0-255 = 0-100% intensity)
+        # Apply brightness to RGB values
+        r = int(r * brightness)
+        g = int(g * brightness)
+        b = int(b * brightness)
+        
         # Set DMX values
         if 'dimmer' in channels:
             data[base_channel + channels['dimmer']] = int(brightness * 255)
