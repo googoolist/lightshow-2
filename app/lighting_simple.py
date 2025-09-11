@@ -50,6 +50,14 @@ class SimpleDmxController(BaseDmxController):
         "Swell (Same Color)",
         "Disco",
         "Psych",
+        "Pulse",
+        "Spectrum",
+        "Strobe",
+        "Chase",
+        "Center Burst",
+        "VU Meter",
+        "Ripple",
+        "Alternating",
     ]
     
     def __init__(self, audio_analyzer, beat_queue, stop_event):
@@ -74,6 +82,20 @@ class SimpleDmxController(BaseDmxController):
         self.disco_states = []  # Random states for each light
         self.psych_phase = 0.0
         
+        # New program states
+        self.pulse_color_index = 0
+        self.spectrum_colors = []  # Colors for spectrum display
+        self.strobe_on = False
+        self.strobe_color_index = 0
+        self.chase_position = 0
+        self.chase_color_index = 0
+        self.burst_radius = 0
+        self.burst_color_index = 0
+        self.vu_peak = 0
+        self.ripple_positions = []  # Multiple wave positions
+        self.alternating_state = False
+        self.alternating_color_index = 0
+        
         # Beat tracking for divisions
         self.beat_counter = 0
         self.last_division_beat = 0
@@ -93,6 +115,13 @@ class SimpleDmxController(BaseDmxController):
             }
             for _ in range(config.MAX_LIGHTS)
         ]
+        
+        # Initialize spectrum colors
+        palette = self._get_color_palette()
+        self.spectrum_colors = [palette[i % len(palette)] for i in range(config.MAX_LIGHTS)]
+        
+        # Initialize ripple wave positions
+        self.ripple_positions = [i * 0.2 for i in range(3)]  # 3 overlapping waves
         
     def set_program(self, program_name):
         """Set the current lighting program."""
@@ -155,6 +184,22 @@ class SimpleDmxController(BaseDmxController):
             self._program_disco(data, intensity)
         elif self.program == "Psych":
             self._program_psych(data, intensity)
+        elif self.program == "Pulse":
+            self._program_pulse(data, audio_state)
+        elif self.program == "Spectrum":
+            self._program_spectrum(data, audio_state)
+        elif self.program == "Strobe":
+            self._program_strobe(data, intensity)
+        elif self.program == "Chase":
+            self._program_chase(data, intensity)
+        elif self.program == "Center Burst":
+            self._program_center_burst(data, intensity)
+        elif self.program == "VU Meter":
+            self._program_vu_meter(data, intensity)
+        elif self.program == "Ripple":
+            self._program_ripple(data, intensity)
+        elif self.program == "Alternating":
+            self._program_alternating(data, intensity)
             
         return data
         
@@ -405,6 +450,270 @@ class SimpleDmxController(BaseDmxController):
             
             # Brightness varies smoothly
             brightness = 0.3 + 0.7 * wave1  # Never too dark
+            brightness *= self.dimming
+            
+            self._set_light_color(data, i, r, g, b, brightness)
+            
+    def _program_pulse(self, data, audio_state):
+        """All lights pulse with volume intensity."""
+        palette = self._get_color_palette()
+        intensity = audio_state['intensity']
+        
+        # Change color on beat division
+        if self._should_trigger_effect():
+            self.pulse_color_index = (self.pulse_color_index + 1) % len(palette)
+        
+        current_color = palette[self.pulse_color_index]
+        
+        # Brightness directly follows volume with minimum threshold
+        brightness = 0.1 + (intensity * 0.9)  # Never completely dark
+        brightness *= self.dimming
+        
+        # Apply to all lights
+        r, g, b = current_color
+        for i in range(self.active_lights):
+            self._set_light_color(data, i, r, g, b, brightness)
+            
+    def _program_spectrum(self, data, audio_state):
+        """Display frequency spectrum across lights."""
+        bass = audio_state.get('bass', 0)
+        mid = audio_state.get('mid', 0)
+        high = audio_state.get('high', 0)
+        
+        # Divide lights into three groups
+        lights_per_band = max(1, self.active_lights // 3)
+        
+        # Color mapping for frequency bands
+        if self.cool_colors_only:
+            bass_color = (0, 255, 128)    # Teal for bass
+            mid_color = (0, 255, 0)       # Green for mids
+            high_color = (0, 128, 255)    # Blue for highs
+        else:
+            bass_color = (255, 0, 0)      # Red for bass
+            mid_color = (255, 255, 0)     # Yellow for mids
+            high_color = (0, 128, 255)    # Blue for highs
+        
+        # Apply frequency levels to light groups
+        for i in range(self.active_lights):
+            if i < lights_per_band:
+                # Bass group (left)
+                brightness = 0.1 + (bass * 0.9)
+                r, g, b = bass_color
+            elif i < lights_per_band * 2:
+                # Mid group (center)
+                brightness = 0.1 + (mid * 0.9)
+                r, g, b = mid_color
+            else:
+                # High group (right)
+                brightness = 0.1 + (high * 0.9)
+                r, g, b = high_color
+            
+            brightness *= self.dimming
+            self._set_light_color(data, i, r, g, b, brightness)
+            
+    def _program_strobe(self, data, intensity):
+        """Strobe effect synchronized to beats."""
+        palette = self._get_color_palette()
+        
+        # Toggle strobe state on beat division
+        if self._should_trigger_effect():
+            self.strobe_on = not self.strobe_on
+            if self.strobe_on:
+                # Change color when turning on
+                self.strobe_color_index = (self.strobe_color_index + 1) % len(palette)
+        
+        if self.strobe_on:
+            # Flash on with intensity-based brightness
+            brightness = 0.5 + (intensity * 0.5)
+            brightness *= self.dimming
+            r, g, b = palette[self.strobe_color_index]
+            
+            for i in range(self.active_lights):
+                self._set_light_color(data, i, r, g, b, brightness)
+        else:
+            # All lights off
+            for i in range(self.active_lights):
+                self._set_light_color(data, i, 0, 0, 0, 0)
+                
+    def _program_chase(self, data, intensity):
+        """Continuous chase effect in one direction."""
+        palette = self._get_color_palette()
+        
+        # Move chase position continuously
+        chase_speed = 0.2 / max(1, self.bpm_division)
+        self.chase_position += chase_speed
+        
+        # Wrap around and change color
+        if self.chase_position >= self.active_lights:
+            self.chase_position = 0
+            self.chase_color_index = (self.chase_color_index + 1) % len(palette)
+        
+        current_color = palette[self.chase_color_index]
+        
+        # Create chase with tail
+        for i in range(self.active_lights):
+            # Calculate distance from chase position
+            distance = abs(i - self.chase_position)
+            
+            # Wrap-around distance
+            wrap_distance = abs(i - (self.chase_position + self.active_lights))
+            distance = min(distance, wrap_distance)
+            
+            if distance < 1:
+                # Lead position
+                brightness = 1.0
+            elif distance < 2:
+                # Tail positions
+                brightness = 0.5
+            elif distance < 3:
+                brightness = 0.2
+            else:
+                brightness = 0.05
+            
+            brightness *= self.dimming
+            r, g, b = current_color
+            self._set_light_color(data, i, r, g, b, brightness)
+            
+    def _program_center_burst(self, data, intensity):
+        """Burst effect from center outward."""
+        palette = self._get_color_palette()
+        
+        # Trigger burst on beat division
+        if self._should_trigger_effect():
+            self.burst_radius = 0
+            self.burst_color_index = (self.burst_color_index + 1) % len(palette)
+        
+        # Expand burst radius
+        burst_speed = 0.15 / max(1, self.bpm_division)
+        self.burst_radius += burst_speed
+        
+        # Reset when burst completes
+        max_radius = self.active_lights / 2
+        if self.burst_radius > max_radius:
+            self.burst_radius = max_radius
+        
+        current_color = palette[self.burst_color_index]
+        center = self.active_lights / 2
+        
+        # Apply burst effect
+        for i in range(self.active_lights):
+            distance = abs(i - center)
+            
+            if distance <= self.burst_radius:
+                # Inside burst radius
+                fade = 1.0 - (distance / max(1, max_radius))
+                brightness = fade * (0.5 + intensity * 0.5)
+            else:
+                brightness = 0.05
+            
+            brightness *= self.dimming
+            r, g, b = current_color
+            self._set_light_color(data, i, r, g, b, brightness)
+            
+    def _program_vu_meter(self, data, intensity):
+        """Volume meter visualization."""
+        # Calculate how many lights to illuminate based on volume
+        lit_lights = int(intensity * self.active_lights)
+        
+        # Smooth peak decay
+        if lit_lights > self.vu_peak:
+            self.vu_peak = lit_lights
+        else:
+            self.vu_peak = max(0, self.vu_peak - 0.1)
+        
+        # Apply VU meter with color gradient
+        for i in range(self.active_lights):
+            if i < lit_lights:
+                # Calculate color based on position (green to yellow to red)
+                position_ratio = i / max(1, self.active_lights - 1)
+                
+                if position_ratio < 0.5:
+                    # Green to yellow
+                    r = int(255 * (position_ratio * 2))
+                    g = 255
+                    b = 0
+                else:
+                    # Yellow to red
+                    r = 255
+                    g = int(255 * (2 - position_ratio * 2))
+                    b = 0
+                
+                brightness = 1.0 * self.dimming
+            elif i == int(self.vu_peak):
+                # Peak indicator
+                r, g, b = 255, 255, 255
+                brightness = 0.5 * self.dimming
+            else:
+                # Off
+                r, g, b = 0, 0, 0
+                brightness = 0
+            
+            self._set_light_color(data, i, r, g, b, brightness)
+            
+    def _program_ripple(self, data, intensity):
+        """Ripple waves flowing across lights."""
+        palette = self._get_color_palette()
+        
+        # Update wave positions
+        wave_speed = 0.1 / max(1, self.bpm_division)
+        for i in range(len(self.ripple_positions)):
+            self.ripple_positions[i] += wave_speed
+            # Wrap around
+            if self.ripple_positions[i] >= self.active_lights + 5:
+                self.ripple_positions[i] = -5
+        
+        # Apply multiple overlapping waves
+        for i in range(self.active_lights):
+            brightness = 0.05  # Base brightness
+            r, g, b = 0, 0, 0
+            
+            # Check each wave
+            for wave_idx, wave_pos in enumerate(self.ripple_positions):
+                distance = abs(i - wave_pos)
+                
+                if distance < 3:
+                    # Wave affects this light
+                    wave_brightness = 1.0 - (distance / 3.0)
+                    wave_brightness *= 0.7  # Scale down for overlapping
+                    
+                    # Different color for each wave
+                    wave_color = palette[(wave_idx * 3) % len(palette)]
+                    
+                    # Additive color mixing
+                    r = min(255, r + int(wave_color[0] * wave_brightness))
+                    g = min(255, g + int(wave_color[1] * wave_brightness))
+                    b = min(255, b + int(wave_color[2] * wave_brightness))
+                    
+                    brightness = min(1.0, brightness + wave_brightness)
+            
+            brightness *= self.dimming
+            self._set_light_color(data, i, r, g, b, brightness)
+            
+    def _program_alternating(self, data, intensity):
+        """Alternating even/odd lights pattern."""
+        palette = self._get_color_palette()
+        
+        # Toggle state on beat division
+        if self._should_trigger_effect():
+            self.alternating_state = not self.alternating_state
+            self.alternating_color_index = (self.alternating_color_index + 1) % len(palette)
+        
+        color1 = palette[self.alternating_color_index]
+        color2 = palette[(self.alternating_color_index + len(palette) // 2) % len(palette)]
+        
+        # Apply alternating pattern
+        for i in range(self.active_lights):
+            is_even = (i % 2 == 0)
+            
+            if (is_even and self.alternating_state) or (not is_even and not self.alternating_state):
+                r, g, b = color1
+                brightness = 0.8
+            else:
+                r, g, b = color2
+                brightness = 0.3
+            
+            # Modulate with intensity
+            brightness *= (0.5 + intensity * 0.5)
             brightness *= self.dimming
             
             self._set_light_color(data, i, r, g, b, brightness)

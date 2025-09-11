@@ -52,7 +52,15 @@ class SimpleUI:
                 "Swell (Different Colors)",
                 "Swell (Same Color)",
                 "Disco",
-                "Psych"
+                "Psych",
+                "Pulse",
+                "Spectrum",
+                "Strobe",
+                "Chase",
+                "Center Burst",
+                "VU Meter",
+                "Ripple",
+                "Alternating"
             ],
             state="readonly",
             font=('Arial', 11),
@@ -176,7 +184,8 @@ class SimpleUI:
         info_text = (
             "Simple Mode - Select a program and adjust controls.\n"
             "BPM Sync: 1x = every beat, 2x = every 2nd beat, etc.\n"
-            "Dimming: Overall brightness control (0% = lights off)"
+            "Dimming: Overall brightness control (0% = lights off)\n"
+            "New: Pulse/Spectrum/VU Meter react to volume & frequency!"
         )
         
         self.info_label = ttk.Label(
