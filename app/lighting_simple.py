@@ -738,7 +738,7 @@ class SimpleDmxController(BaseDmxController):
             self._set_light_color(data, i, r, g, b, brightness)
             
     def _program_center_burst(self, data, intensity):
-        """Burst effect from center outward."""
+        """Burst effect from center outward - optimized for 4 lights."""
         palette = self._get_color_palette()
         
         # Trigger burst on beat division
@@ -746,32 +746,80 @@ class SimpleDmxController(BaseDmxController):
             self.burst_radius = 0
             self.burst_color_index = (self.burst_color_index + 1) % len(palette)
         
-        # Expand burst radius
-        burst_speed = 0.15 / max(1, self.bpm_division)
-        self.burst_radius += burst_speed
-        
-        # Reset when burst completes
-        max_radius = self.active_lights / 2
-        if self.burst_radius > max_radius:
-            self.burst_radius = max_radius
+        # Expand burst radius (0 to 1 over time)
+        burst_speed = 0.25 / max(1, self.bpm_division)
+        self.burst_radius = min(1.0, self.burst_radius + burst_speed)
         
         current_color = palette[self.burst_color_index]
-        center = self.active_lights / 2
+        r, g, b = current_color
         
-        # Apply burst effect
-        for i in range(self.active_lights):
-            distance = abs(i - center)
-            
-            if distance <= self.burst_radius:
-                # Inside burst radius
-                fade = 1.0 - (distance / max(1, max_radius))
-                brightness = fade * (0.5 + intensity * 0.5)
+        # For 4-light setup: lights 0,1,2,3
+        # Center lights are 1 and 2 (indices 1,2)
+        # Outer lights are 0 and 3 (indices 0,3)
+        
+        if self.active_lights == 4:
+            # Phase 1: Center lights (1 and 2) fade in and burst
+            if self.burst_radius < 0.5:
+                # Center lights growing brighter
+                center_brightness = (self.burst_radius * 2) * (0.7 + intensity * 0.3)
+                outer_brightness = 0.05  # Outer lights dim
+                
+                # Light 0 (outer left)
+                self._set_light_color(data, 0, r, g, b, outer_brightness * self.dimming)
+                # Light 1 (center left)
+                self._set_light_color(data, 1, r, g, b, center_brightness * self.dimming)
+                # Light 2 (center right)
+                self._set_light_color(data, 2, r, g, b, center_brightness * self.dimming)
+                # Light 3 (outer right)
+                self._set_light_color(data, 3, r, g, b, outer_brightness * self.dimming)
+                
             else:
-                brightness = 0.05
+                # Phase 2: Energy transfers to outer lights
+                transfer_progress = (self.burst_radius - 0.5) * 2  # 0 to 1
+                
+                # Center lights fading out
+                center_brightness = (1.0 - transfer_progress) * (0.7 + intensity * 0.3)
+                # Outer lights absorbing the burst
+                outer_brightness = transfer_progress * (0.7 + intensity * 0.3)
+                
+                # Light 0 (outer left) - absorbing burst
+                self._set_light_color(data, 0, r, g, b, outer_brightness * self.dimming)
+                # Light 1 (center left) - fading
+                self._set_light_color(data, 1, r, g, b, center_brightness * self.dimming)
+                # Light 2 (center right) - fading
+                self._set_light_color(data, 2, r, g, b, center_brightness * self.dimming)
+                # Light 3 (outer right) - absorbing burst
+                self._set_light_color(data, 3, r, g, b, outer_brightness * self.dimming)
+                
+        else:
+            # For other light counts, use radial burst pattern
+            center = self.active_lights / 2.0
             
-            brightness *= self.dimming
-            r, g, b = current_color
-            self._set_light_color(data, i, r, g, b, brightness)
+            for i in range(self.active_lights):
+                # Calculate distance from center
+                distance_from_center = abs(i - center + 0.5) / (self.active_lights / 2.0)
+                
+                if self.burst_radius < 0.5:
+                    # Burst expanding from center
+                    if distance_from_center < 0.5:
+                        # Center lights
+                        brightness = (self.burst_radius * 2) * (0.7 + intensity * 0.3)
+                    else:
+                        # Outer lights
+                        brightness = 0.05
+                else:
+                    # Energy transferring outward
+                    transfer_progress = (self.burst_radius - 0.5) * 2
+                    
+                    if distance_from_center < 0.5:
+                        # Center lights fading
+                        brightness = (1.0 - transfer_progress) * (0.7 + intensity * 0.3)
+                    else:
+                        # Outer lights absorbing
+                        brightness = transfer_progress * (0.7 + intensity * 0.3)
+                
+                brightness *= self.dimming
+                self._set_light_color(data, i, r, g, b, brightness)
             
     def _program_vu_meter(self, data, intensity):
         """Volume meter visualization."""
