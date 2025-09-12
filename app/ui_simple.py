@@ -111,7 +111,9 @@ class SimpleUI:
                 "Spiral",
                 "Breathing",
                 "Interference",
-                "Color Ripples"
+                "Color Ripples",
+                "Ripple Bounce",
+                "Ripple Bounce Color"
             ],
             state="readonly",
             font=('Arial', 9),

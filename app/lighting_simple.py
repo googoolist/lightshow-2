@@ -63,6 +63,8 @@ class SimpleDmxController(BaseDmxController):
         "Breathing",
         "Interference",
         "Color Ripples",
+        "Ripple Bounce",
+        "Ripple Bounce Color",
     ]
     
     def __init__(self, audio_analyzer, beat_queue, stop_event):
@@ -121,6 +123,13 @@ class SimpleDmxController(BaseDmxController):
         self.interference_phases = []
         self.color_ripple_centers = []  # List of active ripples
         
+        # Ripple Bounce states
+        self.ripple_bounce_position = 0.0
+        self.ripple_bounce_direction = 1  # 1 = forward, -1 = backward
+        self.ripple_bounce_color_index = 0
+        self.ripple_bounce_trail = []  # Trail positions for smooth effect
+        self.ripple_bounce_colors = []  # Colors for each light in color mode
+        
         # Beat tracking for divisions
         self.beat_counter = 0
         self.last_division_beat = 0
@@ -151,6 +160,9 @@ class SimpleDmxController(BaseDmxController):
         # Initialize new pattern states
         self.breathing_phases = [i * 0.3 for i in range(config.MAX_LIGHTS)]
         self.interference_phases = [(i * 0.7, i * 0.5) for i in range(config.MAX_LIGHTS)]
+        
+        # Initialize ripple bounce colors
+        self.ripple_bounce_colors = [palette[i % len(palette)] for i in range(config.MAX_LIGHTS)]
         
         # Initialize ripple wave positions
         self.ripple_positions = [i * 0.2 for i in range(3)]  # 3 overlapping waves
@@ -278,6 +290,10 @@ class SimpleDmxController(BaseDmxController):
             self._program_interference(data, audio_state)
         elif self.program == "Color Ripples":
             self._program_color_ripples(data, audio_state)
+        elif self.program == "Ripple Bounce":
+            self._program_ripple_bounce(data, audio_state)
+        elif self.program == "Ripple Bounce Color":
+            self._program_ripple_bounce_color(data, audio_state)
             
         return data
         
@@ -1065,4 +1081,130 @@ class SimpleDmxController(BaseDmxController):
                 brightness = 0.1
             
             brightness *= (0.5 + intensity * 0.5) * self.dimming
+            self._set_light_color(data, i, r, g, b, brightness)
+            
+    def _program_ripple_bounce(self, data, audio_state):
+        """Ripple effect that bounces back and forth, changing color on each pass."""
+        intensity = audio_state['intensity']
+        palette = self._get_color_palette()
+        
+        # Move on beat
+        if self._should_trigger_effect():
+            # Start new ripple pass
+            if self.ripple_bounce_direction == 1 and self.ripple_bounce_position >= self.active_lights - 1:
+                # Hit the end, bounce back
+                self.ripple_bounce_direction = -1
+                self.ripple_bounce_position = self.active_lights - 1
+                # Change color on direction change
+                self.ripple_bounce_color_index = (self.ripple_bounce_color_index + 1) % len(palette)
+            elif self.ripple_bounce_direction == -1 and self.ripple_bounce_position <= 0:
+                # Hit the start, bounce forward
+                self.ripple_bounce_direction = 1
+                self.ripple_bounce_position = 0
+                # Change color on direction change
+                self.ripple_bounce_color_index = (self.ripple_bounce_color_index + 1) % len(palette)
+            else:
+                # Continue in current direction
+                self.ripple_bounce_position += self.ripple_bounce_direction
+        
+        # Smooth movement between beats
+        move_speed = 0.15  # Adjust for smoothness
+        self.ripple_bounce_position += self.ripple_bounce_direction * move_speed
+        
+        # Clamp position
+        self.ripple_bounce_position = max(0, min(self.active_lights - 1, self.ripple_bounce_position))
+        
+        # Update trail (keep last 3 positions for tail effect)
+        self.ripple_bounce_trail.append(self.ripple_bounce_position)
+        if len(self.ripple_bounce_trail) > 3:
+            self.ripple_bounce_trail.pop(0)
+        
+        current_color = palette[self.ripple_bounce_color_index]
+        
+        # Render the ripple with trail
+        for i in range(self.active_lights):
+            brightness = 0.0
+            
+            # Check if this light is the main position
+            distance = abs(i - self.ripple_bounce_position)
+            if distance < 1.0:
+                # Main ripple position
+                brightness = 1.0 - distance * 0.5
+            
+            # Check trail positions for fade effect
+            for j, trail_pos in enumerate(self.ripple_bounce_trail[:-1]):  # Exclude current position
+                trail_distance = abs(i - trail_pos)
+                if trail_distance < 1.5:
+                    # Trail brightness decreases with age
+                    trail_brightness = (1.0 - trail_distance / 1.5) * (0.5 - j * 0.15)
+                    brightness = max(brightness, trail_brightness)
+            
+            # Apply intensity modulation
+            brightness *= (0.7 + intensity * 0.3)
+            brightness *= self.dimming
+            
+            r, g, b = current_color
+            self._set_light_color(data, i, r, g, b, brightness)
+            
+    def _program_ripple_bounce_color(self, data, audio_state):
+        """Ripple bounce where each light has a different color."""
+        intensity = audio_state['intensity']
+        palette = self._get_color_palette()
+        
+        # Move on beat
+        if self._should_trigger_effect():
+            # Start new ripple pass
+            if self.ripple_bounce_direction == 1 and self.ripple_bounce_position >= self.active_lights - 1:
+                # Hit the end, bounce back
+                self.ripple_bounce_direction = -1
+                self.ripple_bounce_position = self.active_lights - 1
+                # Randomize colors for each light on direction change
+                self.ripple_bounce_colors = [random.choice(palette) for _ in range(self.active_lights)]
+            elif self.ripple_bounce_direction == -1 and self.ripple_bounce_position <= 0:
+                # Hit the start, bounce forward
+                self.ripple_bounce_direction = 1
+                self.ripple_bounce_position = 0
+                # Randomize colors for each light on direction change
+                self.ripple_bounce_colors = [random.choice(palette) for _ in range(self.active_lights)]
+            else:
+                # Continue in current direction
+                self.ripple_bounce_position += self.ripple_bounce_direction
+        
+        # Smooth movement between beats
+        move_speed = 0.15  # Adjust for smoothness
+        self.ripple_bounce_position += self.ripple_bounce_direction * move_speed
+        
+        # Clamp position
+        self.ripple_bounce_position = max(0, min(self.active_lights - 1, self.ripple_bounce_position))
+        
+        # Update trail
+        self.ripple_bounce_trail.append(self.ripple_bounce_position)
+        if len(self.ripple_bounce_trail) > 3:
+            self.ripple_bounce_trail.pop(0)
+        
+        # Render the ripple with individual colors
+        for i in range(self.active_lights):
+            brightness = 0.0
+            
+            # Check if this light is near the ripple position
+            distance = abs(i - self.ripple_bounce_position)
+            if distance < 1.0:
+                # Main ripple position - full brightness
+                brightness = 1.0 - distance * 0.5
+            
+            # Check trail positions for fade effect
+            for j, trail_pos in enumerate(self.ripple_bounce_trail[:-1]):
+                trail_distance = abs(i - trail_pos)
+                if trail_distance < 1.5:
+                    # Trail brightness decreases with age
+                    trail_brightness = (1.0 - trail_distance / 1.5) * (0.5 - j * 0.15)
+                    brightness = max(brightness, trail_brightness)
+            
+            # Use this light's assigned color
+            r, g, b = self.ripple_bounce_colors[i % len(self.ripple_bounce_colors)]
+            
+            # Apply intensity modulation
+            brightness *= (0.7 + intensity * 0.3)
+            brightness *= self.dimming
+            
             self._set_light_color(data, i, r, g, b, brightness)
