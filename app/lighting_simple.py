@@ -65,6 +65,7 @@ class SimpleDmxController(BaseDmxController):
         "Color Ripples",
         "Ripple Bounce",
         "Ripple Bounce Color",
+        "DJ Mode",
     ]
     
     def __init__(self, audio_analyzer, beat_queue, stop_event):
@@ -129,6 +130,18 @@ class SimpleDmxController(BaseDmxController):
         self.ripple_bounce_color_index = 0
         self.ripple_bounce_trail = []  # Trail positions for smooth effect
         self.ripple_bounce_colors = []  # Colors for each light in color mode
+        
+        # DJ Mode states
+        self.dj_current_program = "Breathing"  # Start with ambient
+        self.dj_program_beats = 0  # Beats in current program
+        self.dj_min_beats = 16  # Minimum beats before switching
+        self.dj_energy_history = []  # Track energy over time
+        self.dj_last_switch_time = 0
+        self.dj_build_detected = False
+        self.dj_drop_countdown = 0
+        self.dj_intensity_avg = 0.3  # Running average
+        self.dj_bass_avg = 0.3
+        self.dj_high_avg = 0.3
         
         # Beat tracking for divisions
         self.beat_counter = 0
@@ -294,6 +307,8 @@ class SimpleDmxController(BaseDmxController):
             self._program_ripple_bounce(data, audio_state)
         elif self.program == "Ripple Bounce Color":
             self._program_ripple_bounce_color(data, audio_state)
+        elif self.program == "DJ Mode":
+            self._program_dj_mode(data, audio_state)
             
         return data
         
@@ -1208,3 +1223,192 @@ class SimpleDmxController(BaseDmxController):
             brightness *= self.dimming
             
             self._set_light_color(data, i, r, g, b, brightness)
+            
+    def _program_dj_mode(self, data, audio_state):
+        """DJ Mode - Automatically switches between programs based on music characteristics."""
+        intensity = audio_state['intensity']
+        bass = audio_state.get('bass', 0)
+        mid = audio_state.get('mid', 0)
+        high = audio_state.get('high', 0)
+        bpm = audio_state.get('bpm', 120)
+        
+        # Update running averages with smoothing
+        alpha = 0.1  # Smoothing factor
+        self.dj_intensity_avg = alpha * intensity + (1 - alpha) * self.dj_intensity_avg
+        self.dj_bass_avg = alpha * bass + (1 - alpha) * self.dj_bass_avg
+        self.dj_high_avg = alpha * high + (1 - alpha) * self.dj_high_avg
+        
+        # Track energy history for trend detection
+        self.dj_energy_history.append(intensity)
+        if len(self.dj_energy_history) > 30:  # Keep last second at 30fps
+            self.dj_energy_history.pop(0)
+        
+        # Count beats in current program
+        if self.beat_occurred:
+            self.dj_program_beats += 1
+        
+        # Detect build-ups and drops
+        if len(self.dj_energy_history) >= 30:
+            recent_avg = sum(self.dj_energy_history[-10:]) / 10
+            older_avg = sum(self.dj_energy_history[:10]) / 10
+            
+            # Build-up detection (energy increasing)
+            if recent_avg > older_avg * 1.3 and self.dj_intensity_avg > 0.6:
+                self.dj_build_detected = True
+                self.dj_drop_countdown = 8  # Expect drop in ~8 beats
+                
+            # Drop detection (sudden energy spike)
+            if intensity > 0.9 and self.dj_bass_avg > 0.7:
+                self.dj_drop_countdown = 0
+                self.dj_build_detected = False
+        
+        # Decide if it's time to switch programs
+        should_switch = False
+        new_program = self.dj_current_program
+        
+        if self.dj_program_beats >= self.dj_min_beats:
+            # Categorize energy level and select appropriate program
+            energy_level = self._categorize_energy()
+            
+            if self.dj_drop_countdown == 0 and self.dj_build_detected:
+                # DROP! Go crazy
+                program_choices = ["Center Burst", "Strobe", "Color Ripples", "Disco"]
+                new_program = random.choice(program_choices)
+                self.dj_min_beats = 8  # Short duration for drop
+                self.dj_build_detected = False
+                should_switch = True
+                
+            elif energy_level == "chill":
+                # Low energy - ambient programs
+                program_choices = ["Breathing", "Swell (Same Color)", "Spiral"]
+                # Add some variety based on frequency content
+                if self.dj_high_avg > 0.5:
+                    program_choices.append("Kaleidoscope")
+                new_program = random.choice([p for p in program_choices if p != self.dj_current_program])
+                self.dj_min_beats = 24  # Longer duration for chill
+                should_switch = True
+                
+            elif energy_level == "groovy":
+                # Medium energy - rhythmic programs
+                program_choices = ["Bounce (Same Color)", "Bounce (Different Colors)", 
+                                 "Ripple", "Ripple Bounce", "Chase", "Alternating"]
+                # Prefer bounce programs for steady beats
+                if bpm > 100 and bpm < 130:
+                    program_choices.extend(["Bounce (Same Color)", "Ripple Bounce"])
+                new_program = random.choice([p for p in program_choices if p != self.dj_current_program])
+                self.dj_min_beats = 16  # Medium duration
+                should_switch = True
+                
+            elif energy_level == "energetic":
+                # High energy - dynamic programs
+                program_choices = ["Disco", "Pulse", "VU Meter", "Bounce (Discrete)", 
+                                 "Spectrum", "Ripple Bounce Color"]
+                # Add psychedelic elements if high frequencies are prominent
+                if self.dj_high_avg > 0.6:
+                    program_choices.extend(["Psych", "Interference"])
+                new_program = random.choice([p for p in program_choices if p != self.dj_current_program])
+                self.dj_min_beats = 12  # Shorter duration for energy
+                should_switch = True
+                
+            elif energy_level == "peak":
+                # Maximum energy - intense programs
+                program_choices = ["Strobe", "Center Burst", "Color Ripples", "Psych", 
+                                 "Kaleidoscope", "Interference"]
+                # Bass-heavy? Add pulse
+                if self.dj_bass_avg > 0.7:
+                    program_choices.append("Pulse")
+                new_program = random.choice([p for p in program_choices if p != self.dj_current_program])
+                self.dj_min_beats = 8  # Short bursts at peak
+                should_switch = True
+        
+        # Handle build-up countdown
+        if self.dj_drop_countdown > 0:
+            self.dj_drop_countdown -= 1
+            # During build-up, use programs that create tension
+            if self.dj_drop_countdown < 4 and self.dj_current_program not in ["Swell (Different Colors)", "Pulse"]:
+                new_program = "Swell (Different Colors)"  # Building tension
+                should_switch = True
+                self.dj_min_beats = 4
+        
+        # Switch program if needed
+        if should_switch and new_program != self.dj_current_program:
+            self.dj_current_program = new_program
+            self.dj_program_beats = 0
+            self.dj_last_switch_time = time.time()
+            
+            # Reset some states for smooth transition
+            self.bounce_position = 0
+            self.bounce_direction = 1
+            self.chase_position = 0
+            self.ripple_bounce_position = 0
+            self.ripple_bounce_direction = 1
+            self.burst_radius = 0
+            self.swell_phase = 0.0
+        
+        # Now run the selected program
+        temp_program = self.program  # Save original
+        self.program = self.dj_current_program  # Temporarily set
+        
+        # Call the appropriate program based on what's selected
+        if self.dj_current_program == "Bounce (Same Color)":
+            self._program_bounce_same(data, intensity)
+        elif self.dj_current_program == "Bounce (Different Colors)":
+            self._program_bounce_different(data, intensity)
+        elif self.dj_current_program == "Bounce (Discrete)":
+            self._program_bounce_discrete(data, intensity)
+        elif self.dj_current_program == "Swell (Different Colors)":
+            self._program_swell_different(data, intensity)
+        elif self.dj_current_program == "Swell (Same Color)":
+            self._program_swell_same(data, intensity)
+        elif self.dj_current_program == "Disco":
+            self._program_disco(data, intensity)
+        elif self.dj_current_program == "Psych":
+            self._program_psych(data, audio_state)
+        elif self.dj_current_program == "Pulse":
+            self._program_pulse(data, audio_state)
+        elif self.dj_current_program == "Spectrum":
+            self._program_spectrum(data, audio_state)
+        elif self.dj_current_program == "Strobe":
+            self._program_strobe(data, intensity)
+        elif self.dj_current_program == "Chase":
+            self._program_chase(data, intensity)
+        elif self.dj_current_program == "Center Burst":
+            self._program_center_burst(data, intensity)
+        elif self.dj_current_program == "VU Meter":
+            self._program_vu_meter(data, intensity)
+        elif self.dj_current_program == "Ripple":
+            self._program_ripple(data, intensity)
+        elif self.dj_current_program == "Alternating":
+            self._program_alternating(data, intensity)
+        elif self.dj_current_program == "Kaleidoscope":
+            self._program_kaleidoscope(data, audio_state)
+        elif self.dj_current_program == "Spiral":
+            self._program_spiral(data, audio_state)
+        elif self.dj_current_program == "Breathing":
+            self._program_breathing(data, audio_state)
+        elif self.dj_current_program == "Interference":
+            self._program_interference(data, audio_state)
+        elif self.dj_current_program == "Color Ripples":
+            self._program_color_ripples(data, audio_state)
+        elif self.dj_current_program == "Ripple Bounce":
+            self._program_ripple_bounce(data, audio_state)
+        elif self.dj_current_program == "Ripple Bounce Color":
+            self._program_ripple_bounce_color(data, audio_state)
+        
+        self.program = temp_program  # Restore original
+        
+    def _categorize_energy(self):
+        """Categorize the current energy level of the music."""
+        # Combined score based on intensity, bass, and highs
+        energy_score = (self.dj_intensity_avg * 0.5 + 
+                       self.dj_bass_avg * 0.3 + 
+                       self.dj_high_avg * 0.2)
+        
+        if energy_score < 0.25:
+            return "chill"
+        elif energy_score < 0.45:
+            return "groovy"
+        elif energy_score < 0.65:
+            return "energetic"
+        else:
+            return "peak"

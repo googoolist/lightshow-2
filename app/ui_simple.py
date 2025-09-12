@@ -113,7 +113,8 @@ class SimpleUI:
                 "Interference",
                 "Color Ripples",
                 "Ripple Bounce",
-                "Ripple Bounce Color"
+                "Ripple Bounce Color",
+                "DJ Mode"
             ],
             state="readonly",
             font=('Arial', 9),
