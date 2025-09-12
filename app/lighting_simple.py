@@ -1301,8 +1301,8 @@ class SimpleDmxController(BaseDmxController):
                 
             elif energy_level == "energetic":
                 # High energy - dynamic programs
-                program_choices = ["Disco", "Pulse", "VU Meter", "Bounce (Discrete)", 
-                                 "Spectrum", "Ripple Bounce Color"]
+                program_choices = ["Disco", "Pulse", "Bounce (Discrete)", 
+                                 "Ripple Bounce Color", "Chase", "Alternating"]
                 # Add psychedelic elements if high frequencies are prominent
                 if self.dj_high_avg > 0.6:
                     program_choices.extend(["Psych", "Interference"])
